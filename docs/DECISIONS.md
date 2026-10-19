@@ -396,6 +396,13 @@ environment, so no real-model numbers are published yet.
   and `docs/assets/architecture.svg` are generated offline from Simple Icons (CC0) by scripts in
   `docs/assets/`.
 
+### D-052 Console visual language
+The console uses the MuhAI design language: a tinted ground, white cards on one hairline, a dark action
+colour, lime for the active item, tint pills for statuses, a 92 px icon rail that becomes a bottom bar
+on phones. Inter Tight, Syne (wordmark) and IBM Plex Mono are bundled as latin woff2 files from
+`@fontsource` 5.3.0 under `console/src/assets/fonts/` with their OFL licences; nothing loads from a
+CDN. Class names are unchanged, so the views needed no markup changes beyond the shell in `App.tsx`.
+
 ## Open questions for the human
 None blocking. Human-only items: run `make evidence-llm` with an `ANTHROPIC_API_KEY` to publish real-model
 numbers, eligibility/registration with the organizer, recording the demo video.
