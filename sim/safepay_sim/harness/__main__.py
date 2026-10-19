@@ -3,6 +3,7 @@
   python -m safepay_sim.harness seed            [--seed 42]   live stack: 8 twin tenants, users, registry
   python -m safepay_sim.harness otp USERNAME                  current one-time code of a seeded user (dev)
   python -m safepay_sim.harness demo                          scripted walkthrough on the live stack
+  python -m safepay_sim.harness hold            [--twin X]    leave one HELD payment for the console
   python -m safepay_sim.harness evidence        [--seed 42]   B0/B1/B2 run into evidence/run-<seed>/
   python -m safepay_sim.harness verify-evidence [--seed 42]   offline re-verification of the bundle
   python -m safepay_sim.harness readme          [--seed 42]   regenerate README.md's results table
@@ -282,6 +283,9 @@ def main(argv: list[str] | None = None) -> int:
     otp.add_argument("--password", action="store_true", help="also print the password")
     demo = sub.add_parser("demo")
     demo.add_argument("--core", default="http://127.0.0.1:8000")
+    hold = sub.add_parser("hold")
+    hold.add_argument("--twin", default="logistics")
+    hold.add_argument("--core", default="http://127.0.0.1:8000")
     for name in ("evidence", "verify-evidence", "readme"):
         sub.add_parser(name).add_argument("--seed", type=int, default=42)
     sub.add_parser("verify-audit")
@@ -290,6 +294,7 @@ def main(argv: list[str] | None = None) -> int:
         "seed": cmd_seed,
         "otp": cmd_otp,
         "demo": cmd_demo,
+        "hold": cmd_demo,
         "evidence": cmd_evidence,
         "verify-evidence": cmd_verify_evidence,
         "readme": cmd_readme,

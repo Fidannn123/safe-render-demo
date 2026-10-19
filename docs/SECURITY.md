@@ -73,7 +73,7 @@ the owner does not veto during the cool-off; T3 and T4 allow no agent-initiated 
 |---|---|
 | The VOPRF wrapper matches the CFRG RFC 9497 vectors (ristretto255-SHA512, VOPRF mode) | `intel/tests/test_oprf_vectors.py` (all tests); `tests/spec/test_errors_and_vectors.py` |
 | A bad or swapped proof is rejected | `intel/tests/test_oprf_vectors.py::test_tampered_proof_is_rejected`, `::test_proof_from_other_key_is_rejected`, `::test_swapped_elements_are_rejected` |
-| Blind queries never carry the IBAN or the tag | `core/apps/intel_client/tests/test_privacy.py::test_blind_hit_and_miss_never_send_identifier_or_tag`; the evidence run counts captured blind queries and how many contain any IBAN (see `EVIDENCE.md`, "Fraud network") |
+| Blind queries never carry the IBAN or the tag | `core/apps/intel_client/tests/test_privacy.py::test_blind_hit_and_miss_never_send_identifier_or_tag`; the evidence run searches every captured blind query for the twins' IBANs (`evidence/run-42/privacy.json`, and `EVIDENCE.md`, "Fraud network") |
 | The snapshot holds tags only, no payee identifiers | `intel/tests/test_snapshots.py::test_snapshot_reveals_no_payee_identifier` |
 | Enumeration is bounded by a per-member quota | `intel/tests/test_oprf_api.py::test_quota_exceeded_returns_429`, `::test_quota_counts_each_blinded_element_and_is_per_member`; harness class OPRF_ENUMERATION |
 | A report needs a bank-signed receipt proving the reporter paid that account | `intel/tests/test_reports.py::test_forged_receipt_signature_rejected`, `::test_receipt_paid_by_another_member_rejected`, `::test_payee_mismatch_rejected`, `::test_old_receipt_rejected` |

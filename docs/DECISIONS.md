@@ -324,6 +324,16 @@ Found by reading the compose setup, since Docker is not available on the machine
   key per deployment instead of per-tenant DEKs under a KEK, no velocity freeze, and the large-candidate
   privacy test is not built.
 
+- `make down-volumes` now also deletes `ops/dev-keys/demo` (the users of the deleted database), as
+  `native-reset` already did; before, `make seed` refused after a reset and gave no way to force it.
+- `make hold TWIN=<twin>` leaves one HELD bank-detail-swap payment for the console, because `make demo`
+  rejects its own attack payments.
+- `make tech-doc` (deliverable 01) renders `docs/architecture.md` without section 0 and the schedule,
+  a "differs from this design" section, and the run's generated EVIDENCE.md sections, to PDF via
+  headless Chromium. Mermaid is a root pnpm dev dependency so diagrams render offline.
+- `docs/DECK.md` and `docs/DEMO_SCRIPT.md`: slide outline and video beats; numbers are placeholders
+  pointing at generated evidence cells.
+
 ## Open questions for the human
 None blocking. Human-only items: `ANTHROPIC_API_KEY` in local `.env`, eligibility/registration with the
 organizer, recording the demo video.

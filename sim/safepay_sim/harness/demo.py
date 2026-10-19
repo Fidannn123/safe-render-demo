@@ -295,6 +295,28 @@ class Demo:
         )
         return 0
 
+    def queue_hold(self, twin: str) -> int:
+        """Leave one HELD payment (a bank-detail swap) in a twin's approvals queue for the console."""
+        scenario = next(
+            (
+                s["scenario_id"]
+                for s in self.labels["scenarios"]
+                if s["twin_key"] == twin and s["scenario_class"] == "BANK_DETAIL_SWAP"
+            ),
+            None,
+        )
+        if scenario is None:
+            raise SystemExit(f"twin {twin!r} has no bank-detail-swap scenario")
+        print(f"{self.tenants[twin]['company']}: the agent proposes {scenario} (SYNTHETIC)")
+        owner = self.human(twin, "owner")
+        agent = self.agent(owner, "console-check")
+        invoice = self.ingest(agent, scenario)
+        status, decision = self.propose(agent, invoice)
+        self.show_decision(status, decision)
+        approver = self.user(twin, "approver")["username"]
+        print(f"payment {invoice['payment_id']} waits in the approvals queue; sign in as {approver}")
+        return 0 if status == 201 and decision.get("verdict") == "HOLD" else 1
+
     def network_step(self) -> None:
         scenario = self.scenario("pharmacy-reported-2plus-01")
         report = next(
@@ -381,4 +403,5 @@ def run_demo(runner: Runner, credentials: Path, options: argparse.Namespace) -> 
     if not credentials.exists():
         print("Seed the stack first: make seed")
         return 2
-    return Demo(runner, credentials, options.core).run()
+    demo = Demo(runner, credentials, options.core)
+    return demo.queue_hold(options.twin) if options.command == "hold" else demo.run()

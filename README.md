@@ -88,6 +88,8 @@ cd sim && uv run python -m safepay_sim.harness otp logistics.approver --password
 
 An approver sees the held payments of their company, opens the decision explainer, and approves or
 rejects with a reason. The person who issued the agent's token cannot approve the agent's proposals.
+`make demo` rejects its own attack payments at the end, so run `make hold TWIN=logistics` to leave one
+held payment in that company's queue.
 
 ## Development
 
@@ -108,7 +110,11 @@ make help            # all targets
   the files git would not ignore instead of cloning.
 - Security self-assessment: [docs/SECURITY.md](docs/SECURITY.md) (tiers and the tests that prove them,
   threat model, known risks, OWASP LLM Top 10 mapping).
-- Not built yet: the demo video (outline and script in `docs/`).
+- Technical documentation PDF (deliverable 01): `make tech-doc` writes
+  `evidence/run-42/SafePay-Technical-Documentation.pdf` from `docs/architecture.md` and the run's
+  generated results (needs Chromium, Chrome or Edge). CI builds it into the evidence artifact.
+- Deck outline: [docs/DECK.md](docs/DECK.md). Demo video script: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
+  The video itself is not recorded yet.
 - Harness scope and simplifications are listed in `docs/DECISIONS.md` (D-035 onwards) and in each
   bundle's `EVIDENCE.md`.
 
@@ -117,4 +123,4 @@ make help            # all targets
 `spec/` frozen contracts · `core/` `intel/` `bank_sandbox/` Django 5.2 projects · `console/` Vite +
 React · `sim/` twins and the B0/B1/B2 harness · `ops/` compose, Makefile, scripts · `docs/` design
 ([architecture](docs/architecture.md), [build plan](docs/BUILD_PLAN.md),
-[competition](docs/COMPETITION.md), [decisions](docs/DECISIONS.md)) · `evidence/` generated bundles only.
+[competition](docs/COMPETITION.md), [decisions](docs/DECISIONS.md), [security](docs/SECURITY.md)) · `evidence/` generated bundles only.

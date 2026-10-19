@@ -44,6 +44,8 @@ jobs:
           make evidence SEED=42
           make verify-evidence SEED=42
           make verify-audit
+      - name: Technical documentation PDF from the run
+        run: make tech-doc SEED=42
       - name: Upload the evidence bundle
         if: always()
         uses: actions/upload-artifact@v4

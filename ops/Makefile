@@ -23,7 +23,7 @@ PY_PROJECTS := core intel bank_sandbox
 
 .PHONY: spec-guard help up down down-volumes logs ps keys migrate seed db-up \
         verify lint typecheck test test-spec test-python test-console \
-        demo evidence verify-evidence verify-audit clean-clone fetch-vectors \
+        demo hold evidence verify-evidence verify-audit tech-doc clean-clone fetch-vectors \
         native-init native-up native-down native-status native-reset
 
 help: ## List targets
@@ -36,8 +36,9 @@ up: ## Build and start the whole stack, wait until every service is healthy
 down: ## Stop the stack (keeps the database volume)
 	$(COMPOSE) down
 
-down-volumes: ## Stop the stack and DELETE the database volume
+down-volumes: ## Stop the stack and DELETE the database volume (and the demo users that lived in it)
 	$(COMPOSE) down -v
+	rm -rf ops/dev-keys/demo
 
 logs: ## Follow logs
 	$(COMPOSE) logs -f --tail=100
@@ -96,6 +97,9 @@ test-console: ## pnpm: generate api-client, lint, test
 demo: ## Scripted walkthrough on the running, seeded stack (make up && make seed first)
 	$(HARNESS) demo
 
+hold: ## Leave one HELD payment in a twin's approvals queue for the console (TWIN=logistics)
+	$(HARNESS) hold --twin $(or $(TWIN),logistics)
+
 evidence: ## Full B0/B1/B2 run into evidence/run-$(SEED)/ (fresh database; bank + intel must be up)
 	$(HARNESS) evidence --seed $(SEED)
 
@@ -104,6 +108,9 @@ verify-evidence: ## Re-verify signatures and recompute metrics of evidence/run-$
 
 verify-audit: ## Recompute every seeded tenant's audit hash chain from genesis
 	$(HARNESS) verify-audit
+
+tech-doc: ## Technical documentation PDF: docs/architecture.md + evidence/run-$(SEED) results (needs Chromium)
+	$(UV) run --frozen python ops/scripts/build_tech_doc.py --seed $(SEED)
 
 # ------------------------------------------------------------------ without Docker (dev machines)
 native-init: ## No Docker: PostgreSQL 18 cluster (PG_BIN=<bin dir>), roles, databases, migrations
