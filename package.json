@@ -1,0 +1,17 @@
+{
+  "name": "safepay-workspace",
+  "private": true,
+  "version": "0.0.0",
+  "description": "SafePay console workspace (pnpm only). Synthetic data, simulated bank.",
+  "packageManager": "pnpm@10.34.6",
+  "engines": {
+    "node": ">=22.12",
+    "pnpm": ">=10.34"
+  },
+  "scripts": {
+    "generate": "pnpm --filter @safepay/api-client run generate",
+    "lint": "pnpm -r run lint",
+    "test": "pnpm -r run test",
+    "build": "pnpm -r run build"
+  }
+}

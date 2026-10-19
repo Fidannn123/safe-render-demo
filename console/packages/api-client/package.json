@@ -1,0 +1,20 @@
+{
+  "name": "@safepay/api-client",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Types generated from spec/openapi-*.yaml by openapi-typescript. Never hand-edited.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "generate": "openapi-typescript ../../../spec/openapi-core.yaml -o src/generated/core.ts && openapi-typescript ../../../spec/openapi-intel.yaml -o src/generated/intel.ts && openapi-typescript ../../../spec/openapi-bank.yaml -o src/generated/bank.ts",
+    "lint": "pnpm run generate && tsc --noEmit -p .",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.4",
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3",
+    "vitest": "5.0.3"
+  }
+}

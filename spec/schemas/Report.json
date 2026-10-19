@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Report",
+  "description": "Accountable fraud report submitted to intel (POST /v1/reports). Member-signed (Ed25519 over RFC 8785 canonical JSON of every field except sig). Admission requires: valid member signature; valid bank signature on receipt; receipt.status SETTLED; receipt.creditor equals payee; receipt.debtor account belongs to the member; receipt.booked_at within receipt_max_age_days; one active count per (member, payee). The server sees reported payees by design; it never sees queries.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["report_id", "member_id", "payee", "category", "receipt", "evidence_sha256", "created_at", "nonce", "key_id", "sig"],
+  "properties": {
+    "report_id": { "$ref": "common.json#/$defs/Uuid", "description": "Client-generated; duplicate submissions of the same report_id are idempotent." },
+    "member_id": { "$ref": "common.json#/$defs/Uuid" },
+    "payee": { "$ref": "common.json#/$defs/Payee" },
+    "category": { "type": "string", "enum": ["INVOICE_REDIRECTION", "FAKE_VENDOR", "IMPERSONATION", "OTHER_FRAUD"] },
+    "receipt": { "$ref": "Receipt.json" },
+    "evidence_sha256": { "$ref": "common.json#/$defs/Sha256Hex", "description": "Hash of the member's local evidence file; the file itself is never sent." },
+    "created_at": { "$ref": "common.json#/$defs/Timestamp" },
+    "nonce": { "$ref": "common.json#/$defs/NonceHex" },
+    "key_id": { "$ref": "common.json#/$defs/KeyId" },
+    "sig": { "$ref": "common.json#/$defs/Ed25519Signature" }
+  },
+  "examples": [
+    {
+      "report_id": "abababab-cdcd-4efe-8f0f-121212121212",
+      "member_id": "11111111-2222-4333-8444-555555555555",
+      "payee": { "country": "GB", "iban": "GB82WEST12345698765432" },
+      "category": "INVOICE_REDIRECTION",
+      "receipt": {
+        "receipt_id": "0f0e0d0c-0b0a-4908-8706-050403020100",
+        "transfer_id": "10203040-5060-4708-9090-a0b0c0d0e0f0",
+        "end_to_end_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+        "status": "SETTLED",
+        "debtor": { "account_id": "33333333-4444-4555-8666-777777777777", "iban": "GB33BUKB20201555555555" },
+        "creditor": { "country": "GB", "iban": "GB82WEST12345698765432", "name": "Acme Supp1ies Ltd" },
+        "amount_minor": 125000,
+        "currency": "USD",
+        "booked_at": "2026-10-19T08:30:00Z",
+        "failure_reason": null,
+        "bank_id": "SAFEPAY-SANDBOX",
+        "simulated": true,
+        "key_id": "bank:attestation:1",
+        "sig": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+      },
+      "evidence_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "created_at": "2026-10-19T09:00:00Z",
+      "nonce": "ffeeddccbbaa99887766554433221100",
+      "key_id": "member-11111111:1",
+      "sig": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+    }
+  ]
+}

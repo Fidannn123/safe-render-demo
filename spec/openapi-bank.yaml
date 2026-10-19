@@ -1,0 +1,268 @@
+openapi: 3.1.0
+info:
+  title: SafePay bank sandbox API
+  version: 1.0.0
+  summary: SIMULATED bank rail (FROZEN at G0). Not a real bank; no real money.
+  description: |
+    Simulated accounts, balances, ISO 20022-style JSON transfers, Ed25519-signed receipts and daily
+    statements. Separate Django project and database.
+
+    Transfers are idempotent on `end_to_end_id` (= core payment_id): the same id with the same body
+    returns the original transfer (200); with a different body 409 IDEMPOTENCY_MISMATCH. The sandbox
+    settles synchronously unless failure injection is armed.
+
+    Request signing (all /v1 and /admin endpoints): core signs
+    `METHOD "\n" PATH ["?" QUERY] "\n" X-SafePay-Timestamp "\n" X-SafePay-Nonce "\n" hex(SHA-256(body))`
+    with its Ed25519 service key (mTLS in production); skew <= 300 s; nonce single-use.
+  license:
+    name: Proprietary (FinTechathon 2026 entry)
+servers:
+  - url: http://localhost:8002
+    description: docker compose (bank)
+tags:
+  - name: health
+  - name: accounts
+  - name: transfers
+  - name: statements
+  - name: admin
+
+paths:
+  /healthz:
+    get:
+      operationId: bank_healthz
+      tags: [health]
+      security: []
+      responses:
+        "200":
+          description: Healthy.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+        "503":
+          description: Degraded.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+
+  /v1/accounts/{account_id}:
+    get:
+      operationId: accounts_get
+      tags: [accounts]
+      summary: Account balance (for reconciliation and the demo).
+      security: [{ serviceSignature: [] }]
+      x-problem-codes: [SIGNATURE_INVALID, REQUEST_EXPIRED, NONCE_REPLAYED, ACCOUNT_NOT_FOUND]
+      parameters:
+        - $ref: "#/components/parameters/AccountId"
+        - $ref: "#/components/parameters/KeyIdHeader"
+        - $ref: "#/components/parameters/TimestampHeader"
+        - $ref: "#/components/parameters/NonceHeader"
+      responses:
+        "200":
+          description: Account.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /v1/transfers:
+    post:
+      operationId: transfers_create
+      tags: [transfers]
+      summary: Submit a credit transfer (pain.001-style). Idempotent on end_to_end_id.
+      security: [{ serviceSignature: [] }]
+      x-problem-codes: [SIGNATURE_INVALID, REQUEST_EXPIRED, NONCE_REPLAYED, VALIDATION_FAILED, ACCOUNT_NOT_FOUND, IDEMPOTENCY_MISMATCH]
+      parameters:
+        - $ref: "#/components/parameters/KeyIdHeader"
+        - $ref: "#/components/parameters/TimestampHeader"
+        - $ref: "#/components/parameters/NonceHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TransferRequest" }
+      responses:
+        "201":
+          description: Accepted; settled or failed synchronously with a signed receipt.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Transfer" }
+        "200":
+          description: Idempotent replay (same end_to_end_id and body).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Transfer" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /v1/transfers/{end_to_end_id}:
+    get:
+      operationId: transfers_get
+      tags: [transfers]
+      summary: Transfer status and receipt by end_to_end_id.
+      security: [{ serviceSignature: [] }]
+      x-problem-codes: [SIGNATURE_INVALID, REQUEST_EXPIRED, NONCE_REPLAYED, NOT_FOUND]
+      parameters:
+        - { name: end_to_end_id, in: path, required: true, schema: { $ref: "./schemas/common.json#/$defs/Uuid" } }
+        - $ref: "#/components/parameters/KeyIdHeader"
+        - $ref: "#/components/parameters/TimestampHeader"
+        - $ref: "#/components/parameters/NonceHeader"
+      responses:
+        "200":
+          description: Transfer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Transfer" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /v1/statements:
+    get:
+      operationId: statements_get
+      tags: [statements]
+      summary: Signed daily statement (camt.053-style) for one account and date (UTC).
+      security: [{ serviceSignature: [] }]
+      x-problem-codes: [SIGNATURE_INVALID, REQUEST_EXPIRED, NONCE_REPLAYED, VALIDATION_FAILED, ACCOUNT_NOT_FOUND]
+      parameters:
+        - { name: account_id, in: query, required: true, schema: { $ref: "./schemas/common.json#/$defs/Uuid" } }
+        - { name: date, in: query, required: true, schema: { $ref: "./schemas/common.json#/$defs/Date" } }
+        - $ref: "#/components/parameters/KeyIdHeader"
+        - $ref: "#/components/parameters/TimestampHeader"
+        - $ref: "#/components/parameters/NonceHeader"
+      responses:
+        "200":
+          description: Statement.
+          content:
+            application/json:
+              schema: { $ref: "./schemas/Statement.json" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /admin/fail-next:
+    post:
+      operationId: admin_fail_next
+      tags: [admin]
+      summary: SIMULATION ONLY. Arm failure injection for the next N transfers (chaos tests, demo).
+      security: [{ serviceSignature: [] }]
+      x-problem-codes: [SIGNATURE_INVALID, REQUEST_EXPIRED, NONCE_REPLAYED, VALIDATION_FAILED]
+      parameters:
+        - $ref: "#/components/parameters/KeyIdHeader"
+        - $ref: "#/components/parameters/TimestampHeader"
+        - $ref: "#/components/parameters/NonceHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FailNextRequest" }
+      responses:
+        "200":
+          description: Armed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FailNextState" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+components:
+  securitySchemes:
+    serviceSignature:
+      type: apiKey
+      in: header
+      name: X-SafePay-Signature
+      description: Ed25519 signature (base64) of the core service key over the canonical request string.
+
+  parameters:
+    AccountId:
+      name: account_id
+      in: path
+      required: true
+      schema: { $ref: "./schemas/common.json#/$defs/Uuid" }
+    KeyIdHeader:
+      name: X-SafePay-Key-Id
+      in: header
+      required: true
+      schema: { $ref: "./schemas/common.json#/$defs/KeyId" }
+    TimestampHeader:
+      name: X-SafePay-Timestamp
+      in: header
+      required: true
+      schema: { type: string, pattern: "^[0-9]{10}$", description: "Unix seconds." }
+    NonceHeader:
+      name: X-SafePay-Nonce
+      in: header
+      required: true
+      schema: { $ref: "./schemas/common.json#/$defs/NonceHex" }
+
+  responses:
+    Problem:
+      description: RFC 9457 problem details; see x-problem-codes of the operation.
+      content:
+        application/problem+json:
+          schema: { $ref: "./schemas/Problem.json" }
+
+  schemas:
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status, service, db]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        service: { type: string, enum: [core, intel, bank] }
+        db: { type: string, enum: [ok, unavailable] }
+
+    Account:
+      type: object
+      additionalProperties: false
+      required: [account_id, iban, currency, owner_name, balance_minor, simulated]
+      properties:
+        account_id: { $ref: "./schemas/common.json#/$defs/Uuid" }
+        iban: { $ref: "./schemas/common.json#/$defs/Iban" }
+        currency: { $ref: "./schemas/common.json#/$defs/Currency" }
+        owner_name: { type: string, maxLength: 140 }
+        balance_minor: { type: integer, minimum: 0 }
+        simulated: { const: true }
+
+    TransferRequest:
+      type: object
+      additionalProperties: false
+      required: [end_to_end_id, debtor_account_id, creditor, amount_minor, currency]
+      properties:
+        end_to_end_id: { $ref: "./schemas/common.json#/$defs/Uuid" }
+        debtor_account_id: { $ref: "./schemas/common.json#/$defs/Uuid" }
+        creditor: { $ref: "./schemas/common.json#/$defs/Payee" }
+        amount_minor: { $ref: "./schemas/common.json#/$defs/AmountMinor" }
+        currency: { $ref: "./schemas/common.json#/$defs/Currency" }
+        remittance_info: { type: string, maxLength: 140 }
+
+    Transfer:
+      type: object
+      additionalProperties: false
+      required: [transfer_id, end_to_end_id, status, request_sha256, created_at, receipt]
+      properties:
+        transfer_id: { $ref: "./schemas/common.json#/$defs/Uuid" }
+        end_to_end_id: { $ref: "./schemas/common.json#/$defs/Uuid" }
+        status: { type: string, enum: [ACCEPTED, SETTLED, FAILED] }
+        request_sha256: { $ref: "./schemas/common.json#/$defs/Sha256Hex", description: "SHA-256 of the RFC 8785 canonical TransferRequest (idempotency check)." }
+        created_at: { $ref: "./schemas/common.json#/$defs/Timestamp" }
+        receipt: { oneOf: [ { $ref: "./schemas/Receipt.json" }, { type: "null" } ] }
+
+    FailNextRequest:
+      type: object
+      additionalProperties: false
+      required: [count, reason]
+      properties:
+        count: { type: integer, minimum: 0, maximum: 100, description: "0 disarms." }
+        reason: { type: string, enum: [INSUFFICIENT_FUNDS, CREDITOR_ACCOUNT_INVALID, INJECTED_FAILURE] }
+        mode: { type: string, enum: [fail, timeout], default: fail, description: "timeout = accept but do not respond (chaos test)." }
+
+    FailNextState:
+      type: object
+      additionalProperties: false
+      required: [remaining, reason, mode]
+      properties:
+        remaining: { type: integer, minimum: 0 }
+        reason: { type: string, enum: [INSUFFICIENT_FUNDS, CREDITOR_ACCOUNT_INVALID, INJECTED_FAILURE] }
+        mode: { type: string, enum: [fail, timeout] }

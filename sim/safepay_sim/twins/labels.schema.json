@@ -1,0 +1,321 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:safepay:sim:twins:labels:1",
+  "title": "SafePay twin ground-truth labels (SYNTHETIC)",
+  "description": "labels.json written by python -m safepay_sim.twins. Ground truth for the harness (M10): expected verdicts per configuration (B0/B1/B2), forecast LOW_BUFFER/SHORTFALL weeks, payables schedule, analysis answers and financing need. Money is integer minor units; rates and day counts are decimal strings. Enum values mirror spec/schemas/EvidenceRecord.json and spec/policy.yaml (spec/ is not edited).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["synthetic", "generator", "seed", "policy_version", "currency", "history", "as_of", "forecast_weeks", "twins", "scenarios", "network_reports", "counts"],
+  "properties": {
+    "synthetic": { "const": true },
+    "generator": { "type": "string" },
+    "seed": { "type": "integer", "minimum": 0 },
+    "policy_version": { "type": "string" },
+    "currency": { "const": "USD" },
+    "history": { "$ref": "#/$defs/Window" },
+    "as_of": { "$ref": "#/$defs/Date" },
+    "forecast_weeks": { "const": 13 },
+    "twins": { "type": "array", "minItems": 8, "maxItems": 8, "items": { "$ref": "#/$defs/TwinLabels" } },
+    "scenarios": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/Scenario" } },
+    "network_reports": { "type": "array", "items": { "$ref": "#/$defs/NetworkReport" } },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["by_label", "by_class", "total"],
+      "properties": {
+        "by_label": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } },
+        "by_class": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } },
+        "total": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "$defs": {
+    "Uuid": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+    "Date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "Timestamp": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+    "Iban": { "type": "string", "pattern": "^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$" },
+    "Account": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["country", "iban"],
+      "properties": { "country": { "type": "string", "pattern": "^[A-Z]{2}$" }, "iban": { "$ref": "#/$defs/Iban" } }
+    },
+    "Minor": { "type": "integer", "minimum": 0 },
+    "SignedMinor": { "type": "integer" },
+    "DecimalString": { "type": "string", "pattern": "^-?[0-9]+\\.[0-9]+$" },
+    "ScenarioId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{2,127}$" },
+    "Verdict": { "type": "string", "enum": ["ALLOW", "GUARDED", "HOLD", "DENY"] },
+    "ReasonCode": {
+      "type": "string",
+      "enum": [
+        "PAYEE_NOT_IN_REGISTRY", "CURRENCY_NOT_ALLOWED", "DUPLICATE_PAID", "VENDOR_BLOCKED",
+        "TENANT_FROZEN", "AMOUNT_INVALID",
+        "OVER_PER_TX_CAP", "OVER_ROLLING_24H_CAP", "OVER_NEW_PAYEE_CAP", "OVER_NEW_PAYEE_ROLLING_24H_CAP",
+        "CASH_BUFFER_BREACH", "NETWORK_UNAVAILABLE",
+        "BANK_DETAIL_MISMATCH", "LOOKALIKE_VENDOR", "LOOKALIKE_ACCOUNT", "NETWORK_REPORTED_2PLUS",
+        "NETWORK_REPORTED_1", "INJECTION_MARKERS", "DUPLICATE_SUSPECT", "SPLIT_PATTERN",
+        "AMOUNT_ANOMALY", "NEW_OR_CHANGED_PAYEE"
+      ]
+    },
+    "Window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_date", "end_date", "days"],
+      "properties": { "start_date": { "$ref": "#/$defs/Date" }, "end_date": { "$ref": "#/$defs/Date" }, "days": { "type": "integer", "minimum": 1 } }
+    },
+    "Scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scenario_id", "twin_key", "tenant_id", "scenario_class", "label", "task", "kind", "sim_time", "group_id", "part", "invoice", "truth", "expected", "target_scenario_id", "target_vendor_id", "notes", "synthetic"],
+      "properties": {
+        "scenario_id": { "$ref": "#/$defs/ScenarioId" },
+        "twin_key": { "type": "string" },
+        "tenant_id": { "$ref": "#/$defs/Uuid" },
+        "scenario_class": {
+          "type": "string",
+          "enum": [
+            "BENIGN", "AMBIGUOUS",
+            "HIDDEN_INSTRUCTION", "BANK_DETAIL_SWAP", "LOOKALIKE_VENDOR_OR_ACCOUNT", "DUPLICATE_OR_NEAR_DUPLICATE",
+            "SPLIT_PAYMENTS", "REPORTED_PAYEE", "STOLEN_TOKEN_DIRECT_API", "SELF_APPROVAL", "CONCURRENT_DOUBLE_SUBMIT",
+            "FALSE_REPORT_POISONING", "OPRF_ENUMERATION", "CASH_BUFFER_BREACH"
+          ]
+        },
+        "label": { "type": "string", "enum": ["benign", "attack", "ambiguous"] },
+        "task": { "type": "string", "enum": ["PAY_INVOICE", "SCHEDULE_PAYABLES", "CASHFLOW_ALERT", "FINANCIAL_ANALYSIS", "FINANCING_MATCH", "ATTACK"] },
+        "kind": { "type": "string" },
+        "sim_time": { "$ref": "#/$defs/Timestamp" },
+        "group_id": { "oneOf": [{ "$ref": "#/$defs/ScenarioId" }, { "type": "null" }] },
+        "part": { "oneOf": [{ "type": "integer", "minimum": 1 }, { "type": "null" }] },
+        "invoice": { "oneOf": [{ "$ref": "#/$defs/InvoiceFile" }, { "type": "null" }] },
+        "truth": { "oneOf": [{ "$ref": "#/$defs/Truth" }, { "type": "null" }] },
+        "expected": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["B0", "B1", "B2"],
+          "properties": { "B0": { "$ref": "#/$defs/Expected" }, "B1": { "$ref": "#/$defs/Expected" }, "B2": { "$ref": "#/$defs/Expected" } }
+        },
+        "target_scenario_id": { "oneOf": [{ "$ref": "#/$defs/ScenarioId" }, { "type": "null" }] },
+        "target_vendor_id": { "oneOf": [{ "$ref": "#/$defs/Uuid" }, { "type": "null" }] },
+        "notes": { "type": "string" },
+        "synthetic": { "const": true }
+      },
+      "allOf": [
+        { "if": { "properties": { "label": { "const": "benign" } } }, "then": { "properties": { "scenario_class": { "const": "BENIGN" } } } },
+        { "if": { "properties": { "label": { "const": "ambiguous" } } }, "then": { "properties": { "scenario_class": { "const": "AMBIGUOUS" } } } },
+        { "if": { "properties": { "label": { "const": "attack" } } }, "then": { "properties": { "task": { "const": "ATTACK" } } } }
+      ]
+    },
+    "InvoiceFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "source", "content_type", "sender", "subject", "sha256"],
+      "properties": {
+        "file": { "type": "string", "pattern": "^twins/[a-z_]+/invoices/[a-z0-9_-]+\\.(eml|pdf)$" },
+        "source": { "type": "string", "enum": ["email", "pdf"] },
+        "content_type": { "type": "string", "enum": ["message/rfc822", "application/pdf"] },
+        "sender": { "type": "string" },
+        "subject": { "type": "string" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "Truth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["vendor_id", "vendor_name_on_invoice", "vendor_tax_id_on_invoice", "reference", "amount_minor", "currency", "issue_date", "due_date", "line_items_minor", "bank_details_on_invoice", "early_payment_discount", "has_hidden_instruction", "attacker_iban", "payee_attacker_controlled"],
+      "properties": {
+        "vendor_id": { "oneOf": [{ "$ref": "#/$defs/Uuid" }, { "type": "null" }], "description": "Registry vendor the invoice truly binds to; null = not in the registry." },
+        "vendor_name_on_invoice": { "type": "string" },
+        "vendor_tax_id_on_invoice": { "type": "string" },
+        "reference": { "type": "string", "maxLength": 64 },
+        "amount_minor": { "type": "integer", "minimum": 1 },
+        "currency": { "const": "USD" },
+        "issue_date": { "$ref": "#/$defs/Date" },
+        "due_date": { "$ref": "#/$defs/Date" },
+        "line_items_minor": { "type": "array", "minItems": 1, "items": { "type": "integer", "minimum": 1 } },
+        "bank_details_on_invoice": { "oneOf": [{ "$ref": "#/$defs/Account" }, { "type": "null" }] },
+        "early_payment_discount": {
+          "oneOf": [
+            { "type": "object", "additionalProperties": false, "required": ["discount_bp", "within_days"], "properties": { "discount_bp": { "type": "integer", "minimum": 1, "maximum": 10000 }, "within_days": { "type": "integer", "minimum": 1 } } },
+            { "type": "null" }
+          ]
+        },
+        "has_hidden_instruction": { "type": "boolean" },
+        "attacker_iban": { "oneOf": [{ "$ref": "#/$defs/Iban" }, { "type": "null" }] },
+        "payee_attacker_controlled": { "type": "boolean" }
+      }
+    },
+    "Expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Invoice scenarios: verdict/tier/score/reason_codes from the sim policy oracle (B1, B2). B0 (undefended agent) pays. Non-invoice attacks: API outcome. Task scenarios: pointer to the twin oracle.",
+      "properties": {
+        "verdict": { "$ref": "#/$defs/Verdict" },
+        "tier": { "oneOf": [{ "type": "string", "enum": ["T1", "T2", "T3"] }, { "type": "null" }] },
+        "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "reason_codes": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/ReasonCode" } },
+        "required_reason_codes": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/ReasonCode" } },
+        "max_attacker_loss_minor": { "$ref": "#/$defs/Minor" },
+        "outcome": { "type": "string", "enum": ["PAID", "BLOCKED", "EXPOSED", "NOT_APPLICABLE"] },
+        "http_status": { "type": "integer", "minimum": 100, "maximum": 599 },
+        "problem_code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]+$" },
+        "allowed_evaluations": { "type": "integer", "minimum": 0 },
+        "concurrent_copies": { "type": "integer", "minimum": 2 },
+        "live_payments": { "type": "integer", "minimum": 0 },
+        "oracle": { "type": "string", "pattern": "^twins\\[[a-z_]+\\]\\.(schedule|forecast|analysis|financing_need)$" }
+      },
+      "dependentRequired": { "verdict": ["tier", "score", "reason_codes", "required_reason_codes", "max_attacker_loss_minor"] },
+      "allOf": [
+        { "if": { "required": ["verdict"], "properties": { "verdict": { "const": "DENY" } } }, "then": { "properties": { "tier": { "const": null } } } },
+        { "if": { "required": ["verdict"], "properties": { "verdict": { "const": "ALLOW" } } }, "then": { "properties": { "tier": { "const": "T1" } } } },
+        { "if": { "required": ["verdict"], "properties": { "verdict": { "const": "GUARDED" } } }, "then": { "properties": { "tier": { "const": "T2" } } } },
+        { "if": { "required": ["verdict"], "properties": { "verdict": { "const": "HOLD" } } }, "then": { "properties": { "tier": { "const": "T3" } } } }
+      ],
+      "minProperties": 1
+    },
+    "NetworkReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["iban", "country", "reporter_twins", "distinct_reporters", "scenario_id"],
+      "properties": {
+        "iban": { "$ref": "#/$defs/Iban" },
+        "country": { "type": "string", "pattern": "^[A-Z]{2}$" },
+        "reporter_twins": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+        "distinct_reporters": { "type": "integer", "minimum": 1 },
+        "scenario_id": { "$ref": "#/$defs/ScenarioId" }
+      }
+    },
+    "Week": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["week", "start_date", "end_date", "inflow_minor", "outflow_minor", "closing_minor", "status"],
+      "properties": {
+        "week": { "type": "integer", "minimum": 0, "maximum": 12 },
+        "start_date": { "$ref": "#/$defs/Date" },
+        "end_date": { "$ref": "#/$defs/Date" },
+        "inflow_minor": { "$ref": "#/$defs/Minor" },
+        "outflow_minor": { "$ref": "#/$defs/Minor" },
+        "closing_minor": { "$ref": "#/$defs/SignedMinor" },
+        "status": { "type": "string", "enum": ["OK", "LOW_BUFFER", "SHORTFALL"] }
+      }
+    },
+    "TwinLabels": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["twin_key", "tenant_id", "stress", "task_scenarios", "forecast", "schedule", "analysis", "financing_need"],
+      "properties": {
+        "twin_key": { "type": "string", "pattern": "^[a-z_]+$" },
+        "tenant_id": { "$ref": "#/$defs/Uuid" },
+        "stress": { "type": "string", "enum": ["NONE", "LOW_BUFFER", "SHORTFALL"] },
+        "task_scenarios": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["scenario_id", "task", "oracle"],
+            "properties": {
+              "scenario_id": { "$ref": "#/$defs/ScenarioId" },
+              "task": { "type": "string", "enum": ["SCHEDULE_PAYABLES", "CASHFLOW_ALERT", "FINANCIAL_ANALYSIS", "FINANCING_MATCH"] },
+              "oracle": { "type": "string", "enum": ["schedule", "forecast", "analysis", "financing_need"] }
+            }
+          }
+        },
+        "forecast": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["opening_minor", "buffer_minor", "median_weekly_opex_minor", "min_closing_minor", "weeks", "low_buffer_weeks", "shortfall_weeks"],
+          "properties": {
+            "opening_minor": { "$ref": "#/$defs/SignedMinor" },
+            "buffer_minor": { "$ref": "#/$defs/Minor" },
+            "median_weekly_opex_minor": { "$ref": "#/$defs/Minor" },
+            "min_closing_minor": { "$ref": "#/$defs/SignedMinor" },
+            "weeks": { "type": "array", "minItems": 13, "maxItems": 13, "items": { "$ref": "#/$defs/Week" } },
+            "low_buffer_weeks": { "type": "array", "uniqueItems": true, "items": { "type": "integer", "minimum": 0, "maximum": 12 } },
+            "shortfall_weeks": { "type": "array", "uniqueItems": true, "items": { "type": "integer", "minimum": 0, "maximum": 12 } }
+          }
+        },
+        "schedule": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["hurdle_apr", "items", "discounts_captured_minor", "deferral_order"],
+          "properties": {
+            "hurdle_apr": { "$ref": "#/$defs/DecimalString" },
+            "discounts_captured_minor": { "$ref": "#/$defs/Minor" },
+            "deferral_order": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/Uuid" } },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["invoice_id", "vendor_id", "reference", "amount_minor", "due_date", "early_payment_discount", "apr", "action", "pay_date", "pay_amount_minor", "discount_captured_minor"],
+                "properties": {
+                  "invoice_id": { "$ref": "#/$defs/Uuid" },
+                  "vendor_id": { "$ref": "#/$defs/Uuid" },
+                  "reference": { "type": "string" },
+                  "amount_minor": { "type": "integer", "minimum": 1 },
+                  "due_date": { "$ref": "#/$defs/Date" },
+                  "early_payment_discount": {
+                    "oneOf": [
+                      { "type": "object", "additionalProperties": false, "required": ["discount_bp", "within_days"], "properties": { "discount_bp": { "type": "integer", "minimum": 1, "maximum": 10000 }, "within_days": { "type": "integer", "minimum": 1 } } },
+                      { "type": "null" }
+                    ]
+                  },
+                  "apr": { "oneOf": [{ "$ref": "#/$defs/DecimalString" }, { "type": "null" }] },
+                  "action": { "type": "string", "enum": ["PAY_ON_DUE", "PAY_EARLY"] },
+                  "pay_date": { "$ref": "#/$defs/Date" },
+                  "pay_amount_minor": { "type": "integer", "minimum": 1 },
+                  "discount_captured_minor": { "$ref": "#/$defs/Minor" }
+                }
+              }
+            }
+          }
+        },
+        "analysis": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["window", "dpo_days", "dpo_inputs", "dso_days", "dso_inputs", "gross_burn_weekly_minor", "net_burn_weekly_minor", "burn_inputs", "top_vendors", "questions"],
+          "properties": {
+            "window": { "$ref": "#/$defs/Window" },
+            "dpo_days": { "$ref": "#/$defs/DecimalString" },
+            "dpo_inputs": { "type": "object", "additionalProperties": false, "required": ["ap_open_minor", "ap_invoiced_minor"], "properties": { "ap_open_minor": { "$ref": "#/$defs/Minor" }, "ap_invoiced_minor": { "$ref": "#/$defs/Minor" } } },
+            "dso_days": { "$ref": "#/$defs/DecimalString" },
+            "dso_inputs": { "type": "object", "additionalProperties": false, "required": ["ar_open_minor", "ar_invoiced_minor"], "properties": { "ar_open_minor": { "$ref": "#/$defs/Minor" }, "ar_invoiced_minor": { "$ref": "#/$defs/Minor" } } },
+            "gross_burn_weekly_minor": { "$ref": "#/$defs/Minor" },
+            "net_burn_weekly_minor": { "$ref": "#/$defs/SignedMinor" },
+            "burn_inputs": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["start_date", "weeks", "outflows_minor", "inflows_minor"],
+              "properties": { "start_date": { "$ref": "#/$defs/Date" }, "weeks": { "const": 12 }, "outflows_minor": { "$ref": "#/$defs/Minor" }, "inflows_minor": { "$ref": "#/$defs/Minor" } }
+            },
+            "top_vendors": {
+              "type": "array",
+              "maxItems": 3,
+              "items": { "type": "object", "additionalProperties": false, "required": ["vendor_id", "name", "paid_minor"], "properties": { "vendor_id": { "$ref": "#/$defs/Uuid" }, "name": { "type": "string" }, "paid_minor": { "$ref": "#/$defs/Minor" } } }
+            },
+            "questions": {
+              "type": "array",
+              "items": { "type": "object", "additionalProperties": false, "required": ["id", "text", "answer_key"], "properties": { "id": { "type": "string" }, "text": { "type": "string" }, "answer_key": { "type": "string" } } }
+            }
+          }
+        },
+        "financing_need": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["first_shortfall_week", "last_shortfall_week", "shortfall_weeks", "max_deficit_minor", "amount_to_restore_buffer_minor"],
+              "properties": {
+                "first_shortfall_week": { "type": "integer", "minimum": 0, "maximum": 12 },
+                "last_shortfall_week": { "type": "integer", "minimum": 0, "maximum": 12 },
+                "shortfall_weeks": { "type": "integer", "minimum": 1 },
+                "max_deficit_minor": { "type": "integer", "minimum": 1 },
+                "amount_to_restore_buffer_minor": { "type": "integer", "minimum": 1 }
+              }
+            },
+            { "type": "null" }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Snapshot",
+  "description": "Signed per-epoch tag snapshot from intel (GET /v1/snapshots/{epoch}). tag = first tag_bytes bytes of the RFC 9497 VOPRF Finalize output for x = 'safepay/v1/payee' | country | normalised IBAN, hex-encoded. Clients look tags up locally so the server cannot tell a hit from a miss. Ed25519-signed by the intel snapshot key over the RFC 8785 canonical JSON of every field except sig; oprf_public_key (pk_e) is pinned through this signature.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["epoch", "seq", "issued_at", "valid_until", "suite", "mode", "oprf_public_key", "tag_bytes", "entries", "key_id", "sig"],
+  "properties": {
+    "epoch": { "type": "integer", "minimum": 0 },
+    "seq": { "type": "integer", "minimum": 0, "description": "Monotonic within an epoch (a new snapshot every snapshot_pull_seconds or on change)." },
+    "issued_at": { "$ref": "common.json#/$defs/Timestamp" },
+    "valid_until": { "$ref": "common.json#/$defs/Timestamp" },
+    "suite": { "const": "ristretto255-SHA512" },
+    "mode": { "const": "VOPRF" },
+    "oprf_public_key": { "type": "string", "pattern": "^[A-Za-z0-9+/]{43}=$", "description": "Epoch public key pk_e (32-byte ristretto255 element), base64." },
+    "tag_bytes": { "const": 16 },
+    "entries": {
+      "type": "array",
+      "maxItems": 10000000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tag", "distinct_reporters", "expires_at"],
+        "properties": {
+          "tag": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+          "distinct_reporters": { "type": "integer", "minimum": 1 },
+          "expires_at": { "$ref": "common.json#/$defs/Timestamp" }
+        }
+      }
+    },
+    "key_id": { "$ref": "common.json#/$defs/KeyId" },
+    "sig": { "$ref": "common.json#/$defs/Ed25519Signature" }
+  },
+  "examples": [
+    {
+      "epoch": 2903,
+      "seq": 4,
+      "issued_at": "2026-10-19T09:10:00Z",
+      "valid_until": "2026-10-19T09:20:00Z",
+      "suite": "ristretto255-SHA512",
+      "mode": "VOPRF",
+      "oprf_public_key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "tag_bytes": 16,
+      "entries": [
+        { "tag": "00112233445566778899aabbccddeeff", "distinct_reporters": 2, "expires_at": "2026-11-18T09:00:00Z" }
+      ],
+      "key_id": "intel:snapshot:1",
+      "sig": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+    }
+  ]
+}

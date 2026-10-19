@@ -1,0 +1,40 @@
+[project]
+name = "safepay-intel"
+version = "0.0.0"
+description = "SafePay shared intel network: VOPRF evaluation, signed snapshots, accountable reports."
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "django>=5.2.18,<5.3",
+  "django-ninja>=1.7,<1.8",
+  "psycopg[binary]>=3.2,<3.4",
+  "argon2-cffi>=25.1,<26",
+  "cryptography>=50,<51",
+  "voprf==0.2.0",
+  "rfc8785>=0.1.4,<0.2",
+  "pyyaml>=6.0.3,<7",
+  "gunicorn>=26,<27",
+]
+
+[tool.uv]
+package = false
+
+# Whole intel project is mypy strict (CLAUDE.md).
+[tool.mypy]
+python_version = "3.13"
+plugins = ["mypy_django_plugin.main"]
+exclude = ["migrations/"]
+strict = true
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = ["voprf"]
+ignore_missing_imports = true
+
+[tool.django-stubs]
+django_settings_module = "safepay_intel.settings.test"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "safepay_intel.settings.test"
+testpaths = ["tests", "apps"]
+python_files = ["test_*.py"]
+addopts = "-ra --strict-markers"

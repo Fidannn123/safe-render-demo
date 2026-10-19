@@ -1,0 +1,63 @@
+[project]
+name = "safepay-core"
+version = "0.0.0"
+description = "SafePay core (tenant domain): agent, guardian, payments, ledger, cashflow, approvals, audit."
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "django>=5.2.18,<5.3",
+  "django-ninja>=1.7,<1.8",
+  "psycopg[binary]>=3.2,<3.4",
+  "argon2-cffi>=25.1,<26",
+  "cryptography>=50,<51",
+  "rfc8785>=0.1.4,<0.2",
+  "pyyaml>=6.0.3,<7",
+  "gunicorn>=26,<27",
+  "confusable-homoglyphs>=3.3.1,<4",
+  "django-otp>=1.6,<2",
+  "django-axes>=8,<9",
+  "pypdf>=6,<7",
+  "voprf==0.2.0",
+  "jsonschema>=4.26,<5",
+  "referencing>=0.36",
+]
+
+[tool.uv]
+package = false
+
+[tool.mypy]
+python_version = "3.13"
+plugins = ["mypy_django_plugin.main"]
+exclude = ["migrations/"]
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_return_any = true
+warn_redundant_casts = true
+strict_equality = true
+
+# mypy strict for money/decision paths and crypto wrappers (CLAUDE.md "Definition of done").
+[[tool.mypy.overrides]]
+module = ["apps.ledger.*", "apps.payments.*", "apps.guardian.*", "apps.keystore.*", "apps.intel_client.*"]
+disallow_any_generics = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_decorators = true
+no_implicit_reexport = true
+warn_unused_ignores = true
+extra_checks = true
+
+# confusable_homoglyphs ships no type information; guardian wraps it in apps/guardian/detectors.py.
+[[tool.mypy.overrides]]
+module = ["confusable_homoglyphs", "django_otp.*"]
+ignore_missing_imports = true
+
+[tool.django-stubs]
+django_settings_module = "safepay_core.settings.test"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "safepay_core.settings.test"
+testpaths = ["tests", "apps"]
+python_files = ["test_*.py"]
+addopts = "-ra --strict-markers"

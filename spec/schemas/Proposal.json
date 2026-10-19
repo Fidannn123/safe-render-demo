@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Proposal",
+  "description": "Body of POST /api/v1/agent/proposals, the Planner's only consequential tool (propose_payment). account_id must equal the vendor's verified registry account (else hard rule PAYEE_NOT_IN_REGISTRY); it is never taken from invoice text. invoice_fingerprint is computed server-side.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["invoice_id", "vendor_id", "account_id", "amount_minor", "currency", "reference", "due_date"],
+  "properties": {
+    "invoice_id": { "$ref": "common.json#/$defs/Uuid" },
+    "vendor_id": { "$ref": "common.json#/$defs/Uuid" },
+    "account_id": { "$ref": "common.json#/$defs/Uuid", "description": "Vendor registry bank-account id (from the lookup_vendor tool)." },
+    "amount_minor": { "$ref": "common.json#/$defs/AmountMinor" },
+    "currency": { "$ref": "common.json#/$defs/Currency" },
+    "reference": { "type": "string", "maxLength": 64 },
+    "due_date": { "$ref": "common.json#/$defs/Date" },
+    "requested_execution_date": { "$ref": "common.json#/$defs/Date", "description": "Earlier than due_date only when the scheduler found a discount with APR above the hurdle." },
+    "rationale": { "$ref": "common.json#/$defs/UntrustedText", "description": "Planner's explanation; LLM output, so untrusted and display-only." }
+  },
+  "examples": [
+    {
+      "invoice_id": "7d3f1c2a-0b1e-4c55-9a8e-1f2d3c4b5a69",
+      "vendor_id": "2b8f6a1e-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+      "account_id": "9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d",
+      "amount_minor": 125000,
+      "currency": "USD",
+      "reference": "INV-1042",
+      "due_date": "2026-11-01"
+    }
+  ]
+}

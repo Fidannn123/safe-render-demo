@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AuditEvent",
+  "description": "Append-only, per-tenant hash-chained audit event. body = this object without the hash field; hash = SHA-256(bytes.fromhex(prev_hash) || RFC 8785 canonical JSON(body)), lower-case hex. Genesis prev_hash is 64 zeros. seq starts at 1 and has no gaps. Every payment state transition writes exactly one event in the same transaction.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["seq", "event_id", "tenant_id", "occurred_at", "actor", "action", "subject", "data", "prev_hash", "hash"],
+  "properties": {
+    "seq": { "type": "integer", "minimum": 1 },
+    "event_id": { "$ref": "common.json#/$defs/Uuid" },
+    "tenant_id": { "$ref": "common.json#/$defs/Uuid" },
+    "occurred_at": { "$ref": "common.json#/$defs/Timestamp" },
+    "actor": { "$ref": "common.json#/$defs/Actor" },
+    "action": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]{2,63}$",
+      "description": "Known actions: PAYMENT_TRANSITION, DECISION_ISSUED, APPROVAL_RECORDED, T2_VETO, TENANT_FROZEN, TENANT_UNFROZEN, REGISTRY_CHANGE_REQUESTED, REGISTRY_CHANGE_APPLIED, AGENT_TOKEN_ISSUED, AGENT_TOKEN_REVOKED, LOGIN, LOGIN_FAILED, STEP_UP, RECON_MISMATCH, INCIDENT_OPENED, REPORT_SUBMITTED, CHECKPOINT_SIGNED."
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": { "type": "string", "enum": ["payment", "decision", "tenant", "vendor", "user", "agent_token", "invoice", "report", "checkpoint", "incident"] },
+        "id": { "type": "string", "maxLength": 128 }
+      }
+    },
+    "data": { "type": "object", "description": "Action-specific payload. For PAYMENT_TRANSITION: {from, to, trigger, journal_entry_id|null, outbox_id|null}. Never contains plaintext account numbers." },
+    "prev_hash": { "$ref": "common.json#/$defs/Sha256Hex" },
+    "hash": { "$ref": "common.json#/$defs/Sha256Hex" }
+  },
+  "examples": [
+    {
+      "seq": 1,
+      "event_id": "e1e1e1e1-f2f2-4a3a-8b4b-c5c5c5c5c5c5",
+      "tenant_id": "11111111-2222-4333-8444-555555555555",
+      "occurred_at": "2026-10-19T08:00:05Z",
+      "actor": { "type": "guardian", "id": "guardian" },
+      "action": "PAYMENT_TRANSITION",
+      "subject": { "type": "payment", "id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" },
+      "data": { "from": "PROPOSED", "to": "HELD", "trigger": "decision_hold", "journal_entry_id": null, "outbox_id": null },
+      "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "hash": "4444444444444444444444444444444444444444444444444444444444444444"
+    }
+  ]
+}

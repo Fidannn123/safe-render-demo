@@ -1,0 +1,63 @@
+# SafePay typed problem codes (RFC 9457 problem+json). FROZEN at G0.
+# Every error response of every service is application/problem+json with:
+#   type   = "urn:safepay:problem:<code>"
+#   title  = the title below (stable, English)
+#   status = the HTTP status below
+#   code   = the code key below (machine-readable; must be in schemas/Problem.json enum)
+# detail is free text for humans; clients branch on `code` only.
+version: 1
+type_prefix: "urn:safepay:problem:"
+codes:
+  # --- generic -------------------------------------------------------------
+  VALIDATION_FAILED:          { status: 422, title: "Request body or parameters failed validation", services: [core, intel, bank] }
+  NOT_FOUND:                  { status: 404, title: "Resource not found (or not visible to this tenant)", services: [core, intel, bank] }
+  INTERNAL:                   { status: 500, title: "Internal error", services: [core, intel, bank] }
+  RATE_LIMITED:               { status: 429, title: "Too many requests", services: [core, intel, bank] }
+  # --- authentication / authorisation (core) -------------------------------
+  UNAUTHENTICATED:            { status: 401, title: "Authentication required", services: [core] }
+  ACCOUNT_LOCKED:             { status: 423, title: "Account temporarily locked after failed logins", services: [core] }
+  FORBIDDEN_SCOPE:            { status: 403, title: "Credential lacks the scope or role for this operation", services: [core] }
+  STEP_UP_REQUIRED:           { status: 403, title: "Fresh one-time password (step-up) required", services: [core] }
+  SELF_APPROVAL:              { status: 409, title: "Initiator cannot approve their own payment", services: [core] }
+  SECOND_PERSON_REQUIRED:     { status: 409, title: "A different person must confirm this change", services: [core] }
+  ALREADY_APPROVED_BY_USER:   { status: 409, title: "This approver has already approved this payment", services: [core] }
+  REASON_REQUIRED:            { status: 422, title: "A reason is required for this action", services: [core] }
+  # --- idempotency ---------------------------------------------------------
+  IDEMPOTENCY_KEY_REQUIRED:   { status: 428, title: "Idempotency-Key header required", services: [core] }
+  IDEMPOTENCY_MISMATCH:       { status: 409, title: "Idempotency-Key reused with a different request body", services: [core, bank] }
+  IDEMPOTENCY_IN_PROGRESS:    { status: 409, title: "A request with this Idempotency-Key is still in progress", services: [core] }
+  # --- payments / guardian -------------------------------------------------
+  CAP_EXCEEDED:               { status: 409, title: "Operation would exceed a configured cap", services: [core] }
+  TENANT_FROZEN:              { status: 423, title: "Tenant is frozen (T4); outflows stopped", services: [core] }
+  ILLEGAL_TRANSITION:         { status: 409, title: "Payment state transition not allowed", services: [core] }
+  DECISION_EXPIRED:           { status: 409, title: "Decision has expired", services: [core] }
+  DECISION_REPLAYED:          { status: 409, title: "Decision nonce already used", services: [core] }
+  DECISION_SIGNATURE_INVALID: { status: 422, title: "Decision signature does not verify", services: [core] }
+  DUPLICATE_PAYMENT:          { status: 409, title: "A live payment with this invoice fingerprint already exists", services: [core] }
+  COOLOFF_ELAPSED:            { status: 409, title: "T2 cool-off has elapsed; veto no longer possible", services: [core] }
+  INVOICE_NOT_EXTRACTED:      { status: 409, title: "Invoice has not been extracted yet", services: [core] }
+  # --- approval re-checks (D-029) -----------------------------------------
+  HARD_RULE_FAILED:           { status: 409, title: "A hard (DENY) rule fails at approval time; payment stays HELD", services: [core] }
+  PAYEE_CHANGED:              { status: 409, title: "Payee registry account changed since the Decision", services: [core] }
+  FUNDS_UNAVAILABLE:          { status: 409, title: "Available funds do not cover the reservation", services: [core] }
+  WARNING_NOT_ACKNOWLEDGED:   { status: 409, title: "A warning (e.g. CASH_BUFFER_BREACH) must be explicitly acknowledged", services: [core] }
+  # --- upstream availability (core) ----------------------------------------
+  BANK_UNAVAILABLE:           { status: 503, title: "Bank sandbox unavailable", services: [core] }
+  INTEL_UNAVAILABLE:          { status: 503, title: "Intel network unavailable", services: [core] }
+  # --- service-to-service request signing (intel, bank) ---------------------
+  SIGNATURE_INVALID:          { status: 401, title: "Request signature missing or invalid", services: [intel, bank] }
+  REQUEST_EXPIRED:            { status: 401, title: "Request timestamp outside allowed skew", services: [intel, bank] }
+  NONCE_REPLAYED:             { status: 401, title: "Request nonce already used", services: [intel, bank] }
+  # --- intel ---------------------------------------------------------------
+  QUOTA_EXCEEDED:             { status: 429, title: "OPRF evaluation quota exceeded for this member", services: [intel] }
+  UNKNOWN_EPOCH:              { status: 409, title: "Epoch is not current or unknown", services: [intel] }
+  MEMBER_SUSPENDED:           { status: 403, title: "Member is suspended", services: [intel] }
+  RECEIPT_INVALID:            { status: 422, title: "Bank receipt missing, unsigned, forged or not SETTLED", services: [intel] }
+  RECEIPT_TOO_OLD:            { status: 422, title: "Bank receipt older than receipt_max_age_days", services: [intel] }
+  PAYEE_MISMATCH:             { status: 422, title: "Reported payee does not match receipt creditor", services: [intel] }
+  PAYER_NOT_MEMBER:           { status: 422, title: "Receipt debtor account does not belong to the reporting member", services: [intel] }
+  DUPLICATE_REPORT:           { status: 409, title: "Member already has an active report for this payee", services: [intel] }
+  NOT_REPORTER:               { status: 403, title: "Only the reporting member can retract a report", services: [intel] }
+  # --- bank ----------------------------------------------------------------
+  INSUFFICIENT_FUNDS:         { status: 409, title: "Insufficient funds in debtor account", services: [bank] }
+  ACCOUNT_NOT_FOUND:          { status: 404, title: "Bank account not found", services: [bank] }

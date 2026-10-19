@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Statement",
+  "description": "SIMULATED daily bank statement for one account (ISO 20022 camt.053-style, JSON). Ed25519-signed by the bank attestation key over the RFC 8785 canonical JSON of every field except sig. Lines are booked (settled) entries only. closing = opening + sum(CREDIT) - sum(DEBIT).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["statement_id", "account_id", "iban", "date", "currency", "opening_balance_minor", "closing_balance_minor", "lines", "bank_id", "simulated", "key_id", "sig"],
+  "properties": {
+    "statement_id": { "$ref": "common.json#/$defs/Uuid" },
+    "account_id": { "$ref": "common.json#/$defs/Uuid" },
+    "iban": { "$ref": "common.json#/$defs/Iban" },
+    "date": { "$ref": "common.json#/$defs/Date" },
+    "currency": { "$ref": "common.json#/$defs/Currency" },
+    "opening_balance_minor": { "$ref": "common.json#/$defs/SignedAmountMinor" },
+    "closing_balance_minor": { "$ref": "common.json#/$defs/SignedAmountMinor" },
+    "lines": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["line_id", "end_to_end_id", "transfer_id", "direction", "amount_minor", "counterparty", "booked_at"],
+        "properties": {
+          "line_id": { "$ref": "common.json#/$defs/Uuid" },
+          "end_to_end_id": { "$ref": "common.json#/$defs/Uuid" },
+          "transfer_id": { "$ref": "common.json#/$defs/Uuid" },
+          "direction": { "type": "string", "enum": ["DEBIT", "CREDIT"] },
+          "amount_minor": { "$ref": "common.json#/$defs/AmountMinor" },
+          "counterparty": { "$ref": "common.json#/$defs/Payee" },
+          "remittance_info": { "type": "string", "maxLength": 140 },
+          "booked_at": { "$ref": "common.json#/$defs/Timestamp" }
+        }
+      }
+    },
+    "bank_id": { "const": "SAFEPAY-SANDBOX" },
+    "simulated": { "const": true },
+    "key_id": { "$ref": "common.json#/$defs/KeyId" },
+    "sig": { "$ref": "common.json#/$defs/Ed25519Signature" }
+  },
+  "examples": [
+    {
+      "statement_id": "12121212-3434-4565-8787-909090909090",
+      "account_id": "33333333-4444-4555-8666-777777777777",
+      "iban": "GB33BUKB20201555555555",
+      "date": "2026-10-19",
+      "currency": "USD",
+      "opening_balance_minor": 5000000,
+      "closing_balance_minor": 4875000,
+      "lines": [
+        {
+          "line_id": "56565656-7878-4989-8a8a-bcbcbcbcbcbc",
+          "end_to_end_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+          "transfer_id": "10203040-5060-4708-9090-a0b0c0d0e0f0",
+          "direction": "DEBIT",
+          "amount_minor": 125000,
+          "counterparty": { "country": "GB", "iban": "GB82WEST12345698765432", "name": "Acme Supplies Ltd" },
+          "remittance_info": "INV-1042",
+          "booked_at": "2026-10-19T08:30:00Z"
+        }
+      ],
+      "bank_id": "SAFEPAY-SANDBOX",
+      "simulated": true,
+      "key_id": "bank:attestation:1",
+      "sig": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+    }
+  ]
+}

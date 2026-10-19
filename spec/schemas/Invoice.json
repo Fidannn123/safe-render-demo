@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Invoice",
+  "description": "Raw supplier invoice as ingested by POST /api/v1/invoices. Entirely UNTRUSTED: it is data, never instructions. Only the quarantined Extractor reads body_text/body_base64.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source", "content_type", "received_at"],
+  "oneOf": [
+    { "required": ["body_text"] },
+    { "required": ["body_base64"] }
+  ],
+  "properties": {
+    "source": { "type": "string", "enum": ["email", "pdf", "api"] },
+    "content_type": { "type": "string", "enum": ["text/plain", "message/rfc822", "application/pdf"] },
+    "received_at": { "$ref": "common.json#/$defs/Timestamp" },
+    "sender": { "type": "string", "maxLength": 320 },
+    "subject": { "type": "string", "maxLength": 998 },
+    "filename": { "type": "string", "maxLength": 255 },
+    "external_ref": { "type": "string", "maxLength": 128, "description": "Caller-side id (e.g. mailbox message id); informational." },
+    "body_text": { "type": "string", "maxLength": 200000 },
+    "body_base64": { "type": "string", "contentEncoding": "base64", "maxLength": 14000000, "description": "Text PDF only (OCR of scanned images is out of scope)." }
+  },
+  "examples": [
+    {
+      "source": "email",
+      "content_type": "text/plain",
+      "received_at": "2026-10-19T08:00:00Z",
+      "sender": "billing@acme-supplies.example",
+      "subject": "Invoice INV-1042",
+      "body_text": "Invoice INV-1042\nAmount due: USD 1,250.00\nDue: 2026-11-01\n(SYNTHETIC)"
+    }
+  ]
+}

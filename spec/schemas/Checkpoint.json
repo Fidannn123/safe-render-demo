@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Checkpoint",
+  "description": "Signed audit-chain checkpoint, every 100 events or 5 minutes per tenant. Ed25519-signed by the tenant audit key over the RFC 8785 canonical JSON of every field except sig. make verify-audit recomputes the chain from genesis and checks every checkpoint. No external anchoring (AnchorPort dropped, DECISIONS.md D-030).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["checkpoint_id", "tenant_id", "seq_from", "seq_to", "event_count", "head_hash", "prev_checkpoint_hash", "created_at", "key_id", "sig"],
+  "properties": {
+    "checkpoint_id": { "$ref": "common.json#/$defs/Uuid" },
+    "tenant_id": { "$ref": "common.json#/$defs/Uuid" },
+    "seq_from": { "type": "integer", "minimum": 1 },
+    "seq_to": { "type": "integer", "minimum": 1 },
+    "event_count": { "type": "integer", "minimum": 1 },
+    "head_hash": { "$ref": "common.json#/$defs/Sha256Hex", "description": "hash of the event at seq_to." },
+    "prev_checkpoint_hash": {
+      "oneOf": [ { "$ref": "common.json#/$defs/Sha256Hex" }, { "type": "null" } ],
+      "description": "SHA-256 of the previous checkpoint's canonical JSON; null for the first."
+    },
+    "created_at": { "$ref": "common.json#/$defs/Timestamp" },
+    "key_id": { "$ref": "common.json#/$defs/KeyId" },
+    "sig": { "$ref": "common.json#/$defs/Ed25519Signature" }
+  },
+  "examples": [
+    {
+      "checkpoint_id": "c0c0c0c0-d1d1-4e2e-8f3f-a4a4a4a4a4a4",
+      "tenant_id": "11111111-2222-4333-8444-555555555555",
+      "seq_from": 1,
+      "seq_to": 100,
+      "event_count": 100,
+      "head_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "prev_checkpoint_hash": null,
+      "created_at": "2026-10-19T08:05:00Z",
+      "key_id": "tenant-11111111:audit:1",
+      "sig": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+    }
+  ]
+}

@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SafePay common definitions",
+  "description": "Shared types referenced by every other schema and by the three OpenAPI documents. Money is always integer minor units plus an ISO-4217 code; never floats.",
+  "$defs": {
+    "Uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Lower-case RFC 9562 UUID."
+    },
+    "AmountMinor": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807,
+      "description": "Positive amount in ISO-4217 minor units (cents for USD). BIGINT in PostgreSQL."
+    },
+    "SignedAmountMinor": {
+      "type": "integer",
+      "minimum": -9223372036854775808,
+      "maximum": 9223372036854775807,
+      "description": "Signed int64 amount in minor units (balances, forecast deltas)."
+    },
+    "Currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "ISO-4217 alphabetic code. Allowed values are restricted by policy.yaml (demo: USD)."
+    },
+    "Country": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}$",
+      "description": "ISO-3166-1 alpha-2 country code."
+    },
+    "Iban": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$",
+      "description": "Normalised IBAN: upper-case, no spaces. Mod-97 validity is checked in code, not by this pattern."
+    },
+    "Sha256Hex": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Lower-case hex SHA-256 digest."
+    },
+    "NonceHex": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32,64}$",
+      "description": "Random nonce, 128-256 bits, lower-case hex."
+    },
+    "Ed25519Signature": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9+/]{86}==$",
+      "description": "Ed25519 signature (64 bytes), standard base64 with padding."
+    },
+    "Ed25519PublicKey": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9+/]{43}=$",
+      "description": "Raw Ed25519 public key (32 bytes), standard base64 with padding."
+    },
+    "KeyId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._:-]{2,127}$",
+      "description": "Identifier of the signing key (supports rotation)."
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC 3339 timestamp in UTC (suffix Z)."
+    },
+    "Date": {
+      "type": "string",
+      "format": "date",
+      "description": "ISO-8601 calendar date."
+    },
+    "Verdict": {
+      "type": "string",
+      "enum": ["ALLOW", "GUARDED", "HOLD", "DENY"]
+    },
+    "Tier": {
+      "type": "string",
+      "enum": ["T1", "T2", "T3"],
+      "description": "Execution tier of a Decision. ALLOW=T1, GUARDED=T2, HOLD=T3; DENY carries tier null."
+    },
+    "TokenScope": {
+      "type": "string",
+      "enum": ["T0", "T1", "T2"],
+      "description": "Agent token scopes. T3/T4 are human-only and can never be granted to a token."
+    },
+    "PaymentState": {
+      "type": "string",
+      "enum": [
+        "RECEIVED", "EXTRACTED", "PROPOSED", "DENIED", "HELD", "CLEARED", "APPROVED",
+        "REJECTED", "RESERVED", "SUBMITTED", "SETTLED", "FAILED", "RECONCILED"
+      ],
+      "description": "Must equal the state list in state_machine.yaml."
+    },
+    "ReasonCode": {
+      "type": "string",
+      "enum": [
+        "PAYEE_NOT_IN_REGISTRY", "CURRENCY_NOT_ALLOWED", "DUPLICATE_PAID", "VENDOR_BLOCKED",
+        "TENANT_FROZEN", "AMOUNT_INVALID",
+        "OVER_PER_TX_CAP", "OVER_ROLLING_24H_CAP", "OVER_NEW_PAYEE_CAP", "OVER_NEW_PAYEE_ROLLING_24H_CAP",
+        "CASH_BUFFER_BREACH", "NETWORK_UNAVAILABLE",
+        "BANK_DETAIL_MISMATCH", "LOOKALIKE_VENDOR", "LOOKALIKE_ACCOUNT", "NETWORK_REPORTED_2PLUS",
+        "NETWORK_REPORTED_1", "INJECTION_MARKERS", "DUPLICATE_SUSPECT", "SPLIT_PATTERN",
+        "AMOUNT_ANOMALY", "NEW_OR_CHANGED_PAYEE"
+      ],
+      "description": "Must equal the union of hard, t3 and signal codes in policy.yaml."
+    },
+    "Reason": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "weight", "detail"],
+      "properties": {
+        "code": { "$ref": "#/$defs/ReasonCode" },
+        "weight": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "detail": { "type": "string", "maxLength": 500, "description": "Deterministic, template-generated explanation. Never LLM text." }
+      }
+    },
+    "Payee": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["country", "iban"],
+      "properties": {
+        "country": { "$ref": "#/$defs/Country" },
+        "iban": { "$ref": "#/$defs/Iban" },
+        "name": { "type": "string", "maxLength": 140 }
+      }
+    },
+    "UntrustedText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field", "value", "provenance"],
+      "description": "Opaque free text from an untrusted source. Never interpreted, only quoted and displayed.",
+      "properties": {
+        "field": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+        "value": { "type": "string", "maxLength": 4000 },
+        "provenance": { "const": "untrusted" }
+      }
+    },
+    "Actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": { "type": "string", "enum": ["human", "agent", "system", "guardian", "bank", "reconciler", "intel"] },
+        "id": { "type": "string", "maxLength": 128 }
+      }
+    }
+  }
+}

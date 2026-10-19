@@ -1,0 +1,17 @@
+.git
+.github
+.venv
+**/__pycache__
+**/.mypy_cache
+**/.pytest_cache
+**/.ruff_cache
+**/.hypothesis
+**/node_modules
+console/dist
+console/packages/*/dist
+console/packages/api-client/src/generated
+ops/dev-keys
+evidence
+.env
+.env.*
+docs

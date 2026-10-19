@@ -1,0 +1,94 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: make verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.9.17"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.3"
+      - name: Enable pnpm via corepack
+        run: corepack enable && pnpm --version
+      - name: Python deps (frozen)
+        run: uv sync --all-packages --frozen
+      - name: Dev keys (generated, never committed)
+        run: make keys
+      - name: make verify
+        env:
+          SAFEPAY_LLM: mock
+        run: make verify
+      - name: Compose stack healthy
+        run: make up && make ps
+      - name: Seed, demo and evidence on the compose stack (SYNTHETIC data, SIMULATED bank)
+        run: |
+          make seed
+          make demo
+          make evidence SEED=42
+          make verify-evidence SEED=42
+          make verify-audit
+      - name: Upload the evidence bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-run-42
+          path: |
+            evidence/run-42/
+            README.md
+          if-no-files-found: ignore
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose -f ops/docker-compose.yml logs --no-color --tail 200
+      - name: Teardown
+        if: always()
+        run: make down-volumes
+
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan full history
+        run: >
+          docker run --rm -v "$PWD:/repo" -w /repo zricethezav/gitleaks:v8.29.1
+          git --redact --verbose --exit-code 1 /repo
+
+  audit:
+    name: pip-audit + pnpm audit
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.9.17"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.3"
+      - run: corepack enable
+      - name: pip-audit (locked set)
+        run: |
+          uv export --frozen --all-packages --no-hashes --no-emit-workspace --format requirements-txt > /tmp/requirements.txt
+          uvx pip-audit==2.10.1 --strict --disable-pip --no-deps -r /tmp/requirements.txt
+      - name: pnpm audit
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm audit --audit-level high

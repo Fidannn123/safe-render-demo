@@ -1,0 +1,58 @@
+# SafePay uv workspace root. One lock (uv.lock) for all Python services.
+# Each Django project is run from its own directory (core/, intel/, bank_sandbox/); members are
+# virtual (not installed as packages) so their top-level `apps` packages never collide.
+[project]
+name = "safepay"
+version = "0.0.0"
+description = "SafePay: cash-flow-safe payables copilot (FinTechathon 2026, Topic E). Synthetic data, simulated bank."
+requires-python = ">=3.13,<3.14"
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "ruff>=0.17,<0.18",
+  "mypy>=1.18",
+  "django-stubs>=5.2,<5.3",
+  "types-PyYAML>=6.0",
+  "types-jsonschema>=4.25",
+  "pytest>=9.1,<10",
+  "pytest-django>=4.14,<5",
+  "hypothesis>=6.170",
+  "schemathesis>=4.32,<5",
+  "jsonschema>=4.26,<5",
+  "referencing>=0.36",
+  "openapi-spec-validator>=0.9,<0.10",
+]
+
+[tool.uv]
+package = false
+default-groups = ["dev"]
+
+[tool.uv.workspace]
+members = ["core", "intel", "bank_sandbox", "sim"]
+
+# ---------------------------------------------------------------- ruff (whole repo)
+[tool.ruff]
+target-version = "py313"
+line-length = 110
+extend-exclude = ["**/migrations/**", "console", "spec/vectors", "evidence"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "S", "N", "DJ", "RUF", "SIM", "PT", "C4", "PIE", "RET", "PL"]
+ignore = ["PLR0913", "PLR2004"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101", "PLR2004"]
+"tests/**" = ["S101"]
+"**/settings/*.py" = ["F403", "F405"]
+"**/manage.py" = ["PLC0415"]  # Django convention: import after setting DJANGO_SETTINGS_MODULE
+# Dev-only process launcher: fixed argv lists; SQL built from fixed service names and generated dev passwords.
+"ops/scripts/native_stack.py" = ["S603", "S607", "S608"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["apps", "safepay_core", "safepay_intel", "safepay_bank", "safepay_sim"]
+
+# ---------------------------------------------------------------- pytest (spec tests at root)
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"

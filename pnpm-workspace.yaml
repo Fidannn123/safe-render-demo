@@ -1,0 +1,9 @@
+packages:
+  - console
+  - console/packages/*
+
+# Supply-chain hardening: refuse versions published less than 14 days ago (minutes); only esbuild
+# may run install scripts (Vite needs its native binary).
+minimumReleaseAge: 20160
+onlyBuiltDependencies:
+  - esbuild

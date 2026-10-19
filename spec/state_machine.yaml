@@ -1,0 +1,57 @@
+# SafePay payment state machine. FROZEN at G0. Source: docs/architecture.md section 2.2.
+# Rules:
+#  * Every transition commits in ONE database transaction together with: the state row update,
+#    its ledger postings (template below, may be none), exactly one audit event, and any outbox row.
+#  * Any (from, to) pair not listed here raises ILLEGAL_TRANSITION (spec/errors.yaml).
+#  * atomic_chains list transitions that MUST happen in the same transaction (one audit event each).
+version: 1
+initial: RECEIVED
+
+states:
+  RECEIVED:   { terminal: false, description: "Invoice ingested; untrusted raw content stored" }
+  EXTRACTED:  { terminal: false, description: "Extractor output validated against ExtractedInvoice" }
+  PROPOSED:   { terminal: false, description: "Planner called propose_payment; awaiting Guardian" }
+  DENIED:     { terminal: true,  description: "Guardian hard rule fired" }
+  HELD:       { terminal: false, description: "T3: waiting for human approval(s)" }
+  CLEARED:    { terminal: false, description: "Guardian ALLOW (T1) or GUARDED (T2)" }
+  APPROVED:   { terminal: false, description: "Required human approvals collected" }
+  REJECTED:   { terminal: false, terminal_when: { reject_reason: fraud_or_invalid }, description: "Human rejected a held payment; reject_reason fraud_or_invalid is final, not_now may be proposed again (D-004)" }
+  RESERVED:   { terminal: false, description: "Funds moved Bank:available -> Bank:reserved; outbox row queued (T2 waits for cool-off)" }
+  SUBMITTED:  { terminal: false, description: "Outbox delivered transfer to bank adapter" }
+  SETTLED:    { terminal: false, description: "Bank-signed receipt verified" }
+  FAILED:     { terminal: true,  description: "Bank failure or T2 veto; funds released" }
+  RECONCILED: { terminal: true,  description: "Matched to bank statement line by end_to_end_id and amount" }
+
+transitions:
+  - { from: RECEIVED,  to: EXTRACTED,  trigger: extraction_validated, actor: system,     posting: invoice_accepted, posting_condition: vendor_bound }
+  - { from: EXTRACTED, to: PROPOSED,   trigger: proposal_received,    actor: agent,      posting: null }
+  - { from: PROPOSED,  to: DENIED,     trigger: decision_deny,        actor: guardian,   posting: invoice_voided, posting_condition: invoice_accrued }
+  - { from: PROPOSED,  to: HELD,       trigger: decision_hold,        actor: guardian,   posting: null }
+  - { from: PROPOSED,  to: CLEARED,    trigger: decision_allow_or_guarded, actor: guardian, posting: null }
+  - { from: HELD,      to: APPROVED,   trigger: approvals_complete,   actor: human,      posting: null, guards: [step_up_fresh, approver_not_initiator, distinct_approvers, reason_present, approvals_count_met, hard_rules_pass, tenant_not_frozen, payee_account_unchanged, funds_available, warnings_acknowledged] }
+  - { from: HELD,      to: REJECTED,   trigger: human_reject,         actor: human,      posting: invoice_voided, posting_condition: "invoice_accrued and reject_reason == fraud_or_invalid", guards: [step_up_fresh, reason_present, reject_reason_valid], effects: ["mark_payee_reportable if reject_reason == fraud_or_invalid"] }
+  - { from: REJECTED,  to: PROPOSED,   trigger: proposal_received,    actor: agent,      posting: null, guards: [reject_reason_not_now] }
+  - { from: APPROVED,  to: RESERVED,   trigger: reserve,              actor: system,     posting: reserve, outbox: submit_transfer }
+  - { from: CLEARED,   to: RESERVED,   trigger: reserve,              actor: system,     posting: reserve, outbox: submit_transfer }
+  - { from: RESERVED,  to: SUBMITTED,  trigger: outbox_delivered,     actor: system,     posting: submit, guards: [tenant_not_frozen, cooloff_elapsed_if_t2] }
+  - { from: SUBMITTED, to: SETTLED,    trigger: bank_receipt_settled, actor: bank,       posting: settle, guards: [receipt_signature_valid] }
+  - { from: SUBMITTED, to: FAILED,     trigger: bank_receipt_failed,  actor: bank,       posting: release_in_transit, guards: [receipt_signature_valid] }
+  - { from: RESERVED,  to: FAILED,     trigger: t2_veto,              actor: human,      posting: release_reserved, guards: [step_up_fresh, owner_role, reason_present, cooloff_not_elapsed] }
+  - { from: SETTLED,   to: RECONCILED, trigger: recon_matched,        actor: reconciler, posting: null }
+
+atomic_chains:
+  - [PROPOSED, CLEARED, RESERVED]      # reserve in the same transaction as the ALLOW/GUARDED decision
+  - [HELD, APPROVED, RESERVED]         # reserve in the same transaction as the final approval
+
+# Notes (DECISIONS.md):
+#  * D-004: DENIED and REJECTED never had funds reserved. DENIED posts invoice_voided (if accrued);
+#    REJECTED posts it only for reject_reason fraud_or_invalid (and marks the payee reportable).
+#    REJECTED with not_now keeps the AP accrual open and may be proposed again (new Decision).
+#    A reversal is always a NEW balanced journal entry, never an edit of an existing one.
+#  * D-006/D-029: at or above two_approver_threshold two distinct approvers (neither the initiator);
+#    the payment stays HELD until the count is met. The final approval re-checks hard rules, freeze,
+#    payee account and funds under the tenant-limits row lock; agent caps are NOT re-applied.
+#  * A T4 freeze does not transition payments: RESERVED rows stay RESERVED (outbox refuses to deliver
+#    while frozen) until unfreeze or T2 veto. New proposals while frozen are DENIED (TENANT_FROZEN).
+#  * If the reserve posting violates CHECK (Bank:available >= 0) the whole transaction rolls back and
+#    the payment stays in its previous state (PROPOSED or HELD).

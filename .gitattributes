@@ -1,0 +1,11 @@
+* text=auto eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.png binary
+*.pdf binary
+*.mp4 binary
+# Downloaded official vectors: byte-exact, hashes recorded in spec/vectors/SOURCES.sha256
+spec/vectors/rfc9497/** -text
+spec/vectors/rfc8785/** -text

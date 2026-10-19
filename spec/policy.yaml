@@ -1,0 +1,166 @@
+# SafePay Guardian policy. FROZEN at G0 (values from docs/BUILD_PLAN.md "Default policy values").
+# Every Decision stores policy_version so any past verdict can be replayed against this exact file.
+# Money: integer minor units (USD cents). Rates: decimal STRINGS, parse with decimal.Decimal, never float.
+# Windows are rolling (now - N hours), never calendar days.
+policy_version: "2026.10.19-1"
+
+currency:
+  demo: USD
+  allowed: [USD]
+  minor_units: 2
+
+caps:
+  per_tx_cap: 500000                   # 5,000.00   above -> OVER_PER_TX_CAP (T3)
+  rolling_24h_cap: 2000000             # 20,000.00  agent outflow in rolling 24 h -> OVER_ROLLING_24H_CAP (T3)
+  new_payee_cap: 100000                # 1,000.00   per payment to a new/changed payee -> OVER_NEW_PAYEE_CAP (T3)
+  new_payee_rolling_24h_cap: 200000    # 2,000.00   rolling 24 h to new/changed payees -> OVER_NEW_PAYEE_ROLLING_24H_CAP (T3)
+  two_approver_threshold: 1500000      # 15,000.00  amount at or above -> two distinct approvers (D-007)
+  rolling_window_hours: 24
+  # Caps are evaluated under SELECT ... FOR UPDATE on the tenant limits row. Rolling sums count
+  # payments in RESERVED, SUBMITTED, SETTLED, RECONCILED (money committed or gone).
+  counted_states: [RESERVED, SUBMITTED, SETTLED, RECONCILED]
+
+payee:
+  new_or_changed_window_days: 30       # account first used or changed < 30 days ago = new/changed
+
+scoring:
+  score_max: 100                       # score = min(100, sum of signal weights)
+  score_hold_threshold: 50             # score >= 50 -> HOLD
+  score_t1_max: 29                     # T1 (ALLOW) requires score < 30
+
+buffer:
+  buffer_floor: 500000                 # 5,000.00
+  median_opex_weeks: 2                 # buffer = max(buffer_floor, 2 x median weekly opex)
+  forecast_weeks: 13
+
+scheduling:
+  early_pay_hurdle_apr: "0.12"         # pay early only if discount APR > hurdle
+  apr_day_count: 365                   # APR = (d / (1 - d)) * (365 / (due_days - discount_days))
+
+timing:
+  t2_cooloff_seconds:
+    demo: 600
+    prod: 14400
+  decision_ttl_seconds: 900
+  step_up_otp_max_age_seconds: 300
+  agent_token_ttl_seconds: 3600
+
+network:
+  oprf_quota_per_member_per_day: 500
+  oprf_epoch_days: 7
+  snapshot_pull_seconds: 600
+  report_expiry_days: 30
+  receipt_max_age_days: 90
+  tag_bytes: 16
+  input_domain: "safepay/v1/payee"     # x = input_domain | ISO country | normalised IBAN
+  check_payees: new_or_changed         # network checked only for new/changed payees (else SKIP, network_epoch null)
+  on_unavailable:
+    new_or_changed: NETWORK_UNAVAILABLE   # fail closed: T3 trigger -> HOLD
+    known: continue                       # known payees continue without the network
+  never_deny: true                     # network codes may only add risk / force HOLD; never DENY
+
+outbox:
+  outbox_max_retries: 6                # then incident
+  backoff_base_seconds: 2
+  backoff_max_seconds: 300
+  jitter: full                         # sleep = random(0, min(max, base * 2^attempt))
+
+recon:
+  recon_interval_seconds: 300
+  end_of_day: true
+  missing_in_bank_sla_seconds: 3600    # MISSING_IN_BANK beyond SLA -> alert (D-014)
+  freeze_on: [MISSING_IN_LEDGER, AMOUNT_MISMATCH]   # automatic T4 freeze + incident
+
+approvals:                             # D-029
+  reason_required: true
+  initiator_cannot_approve: true       # also DB CHECK (approver_id <> initiator_id)
+  approvers_required_default: 1
+  approvers_required_at_or_above_two_approver_threshold: 2   # distinct approvers, none is the initiator
+  reapply_agent_caps: false            # approving a HOLD does not re-apply the agent caps that caused it
+  # Re-checked in ONE transaction under the tenant-limits row lock (SELECT ... FOR UPDATE) when the
+  # final required approval arrives; any failure leaves the payment HELD and returns a typed error.
+  recheck_at_final_approval:
+    - hard_rules                       # every reason_codes.hard rule -> 409 HARD_RULE_FAILED
+    - tenant_not_frozen                # -> 423 TENANT_FROZEN
+    - payee_account_unchanged          # registry account vs the inputs bound by inputs_sha256 -> 409 PAYEE_CHANGED
+    - funds_available                  # reserve would keep Bank:available >= 0 -> 409 FUNDS_UNAVAILABLE
+  warnings_requiring_ack: [CASH_BUFFER_BREACH]   # missing acknowledgement -> 409 WARNING_NOT_ACKNOWLEDGED
+  approved_amounts_count_toward_rolling_caps: true   # human-approved payments count for later agent payments
+  audit_fields: [approver_ids, reasons, acknowledged_warnings]
+  reject_reasons:
+    fraud_or_invalid: { reverse_accrual: true,  payee_reportable: true,  reproposable: false }
+    not_now:          { reverse_accrual: false, payee_reportable: false, reproposable: true }
+  step_up_required: [approve, reject, veto, unfreeze, registry_edit, agent_token_issue]
+
+detectors:
+  lookalike:
+    skeleton: unicode-tr39             # confusable skeleton (maintained library, e.g. confusable_homoglyphs)
+    max_damerau_levenshtein: 2
+    account_prefix_suffix_chars: 4     # LOOKALIKE_ACCOUNT: shares first or last 4 chars of BBAN with a known account (D-015)
+  duplicate_suspect:
+    window_days: 30
+    reference_max_edit_distance: 2
+  split_pattern:
+    min_count: 3
+    window_hours: 24
+    sum_exceeds: per_tx_cap
+  amount_anomaly:
+    robust_z_threshold: "3.5"          # |x - median| / (1.4826 * MAD) > 3.5
+    min_history: 5                     # fewer than 5 prior payments -> signal not evaluated (D-015)
+  injection_markers:
+    applies_to: untrusted_text         # signal only; the structural defence is the dual-LLM split
+
+# Reason codes by effect. common.json ReasonCode enum == hard + t3 + keys(signals).
+reason_codes:
+  hard:                                # any -> DENY (tier null)
+    - PAYEE_NOT_IN_REGISTRY
+    - CURRENCY_NOT_ALLOWED
+    - DUPLICATE_PAID
+    - VENDOR_BLOCKED
+    - TENANT_FROZEN
+    - AMOUNT_INVALID
+  t3:                                  # any -> HOLD (tier T3); weight 0, they do not add to score
+    - OVER_PER_TX_CAP
+    - OVER_ROLLING_24H_CAP
+    - OVER_NEW_PAYEE_CAP
+    - OVER_NEW_PAYEE_ROLLING_24H_CAP
+    - CASH_BUFFER_BREACH
+    - NETWORK_UNAVAILABLE
+  signals:                             # weights summed into score
+    BANK_DETAIL_MISMATCH: 50
+    LOOKALIKE_VENDOR: 50
+    LOOKALIKE_ACCOUNT: 50
+    NETWORK_REPORTED_2PLUS: 50
+    NETWORK_REPORTED_1: 25
+    INJECTION_MARKERS: 30
+    DUPLICATE_SUSPECT: 30
+    SPLIT_PATTERN: 30
+    AMOUNT_ANOMALY: 20
+    NEW_OR_CHANGED_PAYEE: 15
+
+# Policy resolution (docs/BUILD_PLAN.md; DECISIONS.md D-001). Evaluated in order; first match wins.
+# payee_new_or_changed := registry account first used or changed < new_or_changed_window_days ago.
+verdict_rules:
+  - id: R1
+    when: "any(hard)"
+    verdict: DENY
+    tier: null
+  - id: R2
+    when: "any(t3) or score >= score_hold_threshold"
+    verdict: HOLD
+    tier: T3
+  - id: R3
+    when: "payee_new_or_changed"       # score < 50 and within new-payee caps (else R2 fired)
+    verdict: GUARDED
+    tier: T2
+  - id: R4
+    when: "not payee_new_or_changed and score <= score_t1_max"
+    verdict: ALLOW
+    tier: T1
+  - id: R5
+    when: "not payee_new_or_changed and score > score_t1_max"   # 30 <= score < 50
+    verdict: GUARDED
+    tier: T2
+
+# Funds are reserved in the same transaction as an ALLOW/GUARDED decision (or a human APPROVE).
+reserve_on: [ALLOW, GUARDED]

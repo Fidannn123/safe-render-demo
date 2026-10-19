@@ -1,0 +1,256 @@
+openapi: 3.1.0
+info:
+  title: SafePay intel network API
+  version: 1.0.0
+  summary: Shared fraud-intelligence network (FROZEN at G0). Separate Django project and database.
+  description: |
+    Privacy-preserving cross-business fraud network. Members query blindly with RFC 9497 VOPRF
+    (suite ristretto255-SHA512, verifiable mode) and look tags up locally in a signed snapshot, so the
+    server never learns which payee was queried or whether it was a hit. Reports are accountable:
+    member-signed and backed by a SIMULATED bank-signed settlement receipt.
+
+    The server learns: member id, timing, number of evaluations. It never learns: the queried payee,
+    the tag, or the lookup result. It never receives a payment proposal.
+
+    Network signals add risk and can force HOLD in the Guardian; they never DENY.
+
+    Request signing (all /v1 endpoints): members sign
+    `METHOD "\n" PATH ["?" QUERY] "\n" X-SafePay-Timestamp "\n" X-SafePay-Nonce "\n" hex(SHA-256(body))`
+    with Ed25519; timestamp skew <= 300 s; nonce single-use within the skew window. Failures return
+    401 SIGNATURE_INVALID / REQUEST_EXPIRED / NONCE_REPLAYED. Members are admission-controlled
+    (seeded by management command; KYB in production), so there is no public registration endpoint.
+  license:
+    name: Proprietary (FinTechathon 2026 entry)
+servers:
+  - url: http://localhost:8001
+    description: docker compose (intel)
+tags:
+  - name: health
+  - name: oprf
+  - name: snapshots
+  - name: reports
+
+paths:
+  /healthz:
+    get:
+      operationId: intel_healthz
+      tags: [health]
+      security: []
+      responses:
+        "200":
+          description: Healthy.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+        "503":
+          description: Degraded.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+
+  /v1/epochs/current:
+    get:
+      operationId: epochs_current
+      tags: [oprf]
+      summary: Current epoch and its OPRF public key pk_e (also pinned in the signed snapshot).
+      security: [{ memberSignature: [] }]
+      x-problem-codes: [SIGNATURE_INVALID, REQUEST_EXPIRED, NONCE_REPLAYED, MEMBER_SUSPENDED]
+      parameters:
+        - $ref: "#/components/parameters/KeyIdHeader"
+        - $ref: "#/components/parameters/TimestampHeader"
+        - $ref: "#/components/parameters/NonceHeader"
+      responses:
+        "200":
+          description: Current epoch.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Epoch" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+
+  /v1/oprf/evaluate:
+    post:
+      operationId: oprf_evaluate
+      tags: [oprf]
+      summary: VOPRF BlindEvaluate. Counts against oprf_quota_per_member_per_day (one per blinded element).
+      security: [{ memberSignature: [] }]
+      x-problem-codes: [SIGNATURE_INVALID, REQUEST_EXPIRED, NONCE_REPLAYED, MEMBER_SUSPENDED, VALIDATION_FAILED, UNKNOWN_EPOCH, QUOTA_EXCEEDED]
+      parameters:
+        - $ref: "#/components/parameters/KeyIdHeader"
+        - $ref: "#/components/parameters/TimestampHeader"
+        - $ref: "#/components/parameters/NonceHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EvaluateRequest" }
+      responses:
+        "200":
+          description: Evaluated elements and a batched DLEQ proof against pk_e.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvaluateResponse" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+
+  /v1/snapshots/{epoch}:
+    get:
+      operationId: snapshots_get
+      tags: [snapshots]
+      summary: Signed tag snapshot for an epoch (pulled every snapshot_pull_seconds; lookup is local).
+      security: [{ memberSignature: [] }]
+      x-problem-codes: [SIGNATURE_INVALID, REQUEST_EXPIRED, NONCE_REPLAYED, MEMBER_SUSPENDED, NOT_FOUND]
+      parameters:
+        - { name: epoch, in: path, required: true, schema: { type: integer, minimum: 0 } }
+        - $ref: "#/components/parameters/KeyIdHeader"
+        - $ref: "#/components/parameters/TimestampHeader"
+        - $ref: "#/components/parameters/NonceHeader"
+      responses:
+        "200":
+          description: Snapshot.
+          content:
+            application/json:
+              schema: { $ref: "./schemas/Snapshot.json" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /v1/reports:
+    post:
+      operationId: reports_submit
+      tags: [reports]
+      summary: Submit an accountable report (member signature + bank-signed receipt proving payment to the payee within receipt_max_age_days). One count per (member, payee); expires after report_expiry_days.
+      security: [{ memberSignature: [] }]
+      x-problem-codes: [SIGNATURE_INVALID, REQUEST_EXPIRED, NONCE_REPLAYED, MEMBER_SUSPENDED, VALIDATION_FAILED, RECEIPT_INVALID, RECEIPT_TOO_OLD, PAYEE_MISMATCH, PAYER_NOT_MEMBER, DUPLICATE_REPORT]
+      parameters:
+        - $ref: "#/components/parameters/KeyIdHeader"
+        - $ref: "#/components/parameters/TimestampHeader"
+        - $ref: "#/components/parameters/NonceHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "./schemas/Report.json" }
+      responses:
+        "201":
+          description: Admitted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReportRecord" }
+        "200":
+          description: Idempotent replay of the same report_id.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReportRecord" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /v1/reports/{report_id}:
+    delete:
+      operationId: reports_retract
+      tags: [reports]
+      summary: Retract a report (reporting member only). Idempotent.
+      security: [{ memberSignature: [] }]
+      x-problem-codes: [SIGNATURE_INVALID, REQUEST_EXPIRED, NONCE_REPLAYED, NOT_REPORTER, NOT_FOUND]
+      parameters:
+        - { name: report_id, in: path, required: true, schema: { $ref: "./schemas/common.json#/$defs/Uuid" } }
+        - $ref: "#/components/parameters/KeyIdHeader"
+        - $ref: "#/components/parameters/TimestampHeader"
+        - $ref: "#/components/parameters/NonceHeader"
+      responses:
+        "204": { description: Retracted. }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+components:
+  securitySchemes:
+    memberSignature:
+      type: apiKey
+      in: header
+      name: X-SafePay-Signature
+      description: Ed25519 signature (base64) over the canonical request string in info.description.
+
+  parameters:
+    KeyIdHeader:
+      name: X-SafePay-Key-Id
+      in: header
+      required: true
+      schema: { $ref: "./schemas/common.json#/$defs/KeyId" }
+    TimestampHeader:
+      name: X-SafePay-Timestamp
+      in: header
+      required: true
+      schema: { type: string, pattern: "^[0-9]{10}$", description: "Unix seconds." }
+    NonceHeader:
+      name: X-SafePay-Nonce
+      in: header
+      required: true
+      schema: { $ref: "./schemas/common.json#/$defs/NonceHex" }
+
+  responses:
+    Problem:
+      description: RFC 9457 problem details; see x-problem-codes of the operation.
+      content:
+        application/problem+json:
+          schema: { $ref: "./schemas/Problem.json" }
+
+  schemas:
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status, service, db]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        service: { type: string, enum: [core, intel, bank] }
+        db: { type: string, enum: [ok, unavailable] }
+
+    Element:
+      type: string
+      pattern: "^[A-Za-z0-9+/]{43}=$"
+      description: Serialized ristretto255 element (32 bytes), standard base64.
+
+    Epoch:
+      type: object
+      additionalProperties: false
+      required: [epoch, suite, mode, oprf_public_key, starts_at, ends_at]
+      properties:
+        epoch: { type: integer, minimum: 0 }
+        suite: { const: ristretto255-SHA512 }
+        mode: { const: VOPRF }
+        oprf_public_key: { $ref: "#/components/schemas/Element" }
+        starts_at: { $ref: "./schemas/common.json#/$defs/Timestamp" }
+        ends_at: { $ref: "./schemas/common.json#/$defs/Timestamp" }
+
+    EvaluateRequest:
+      type: object
+      additionalProperties: false
+      required: [epoch, blinded]
+      properties:
+        epoch: { type: integer, minimum: 0 }
+        blinded: { type: array, minItems: 1, maxItems: 16, items: { $ref: "#/components/schemas/Element" } }
+
+    EvaluateResponse:
+      type: object
+      additionalProperties: false
+      required: [epoch, evaluated, proof]
+      properties:
+        epoch: { type: integer, minimum: 0 }
+        evaluated: { type: array, minItems: 1, maxItems: 16, items: { $ref: "#/components/schemas/Element" } }
+        proof: { type: string, pattern: "^[A-Za-z0-9+/]{86}==$", description: "RFC 9497 proof (c, s) = 64 bytes, base64." }
+        quota_remaining: { type: integer, minimum: 0 }
+
+    ReportRecord:
+      type: object
+      additionalProperties: false
+      required: [report_id, status, payee_counted, expires_at]
+      properties:
+        report_id: { $ref: "./schemas/common.json#/$defs/Uuid" }
+        status: { type: string, enum: [ADMITTED, RETRACTED, EXPIRED] }
+        payee_counted: { type: boolean, description: "False if this member already counted for this payee." }
+        expires_at: { $ref: "./schemas/common.json#/$defs/Timestamp" }

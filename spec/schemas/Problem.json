@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Problem",
+  "description": "RFC 9457 problem details (media type application/problem+json). code is the typed SafePay code; its enum must equal the keys of spec/errors.yaml, and type must be 'urn:safepay:problem:' + code. Extension members are allowed by RFC 9457.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["type", "title", "status", "code"],
+  "properties": {
+    "type": { "type": "string", "pattern": "^urn:safepay:problem:[A-Z][A-Z0-9_]+$" },
+    "title": { "type": "string", "maxLength": 200 },
+    "status": { "type": "integer", "minimum": 400, "maximum": 599 },
+    "detail": { "type": "string", "maxLength": 2000 },
+    "instance": { "type": "string", "maxLength": 512 },
+    "code": {
+      "type": "string",
+      "enum": [
+        "VALIDATION_FAILED", "NOT_FOUND", "INTERNAL", "RATE_LIMITED",
+        "UNAUTHENTICATED", "ACCOUNT_LOCKED", "FORBIDDEN_SCOPE", "STEP_UP_REQUIRED", "SELF_APPROVAL",
+        "SECOND_PERSON_REQUIRED", "ALREADY_APPROVED_BY_USER", "REASON_REQUIRED",
+        "IDEMPOTENCY_KEY_REQUIRED", "IDEMPOTENCY_MISMATCH", "IDEMPOTENCY_IN_PROGRESS",
+        "CAP_EXCEEDED", "TENANT_FROZEN", "ILLEGAL_TRANSITION", "DECISION_EXPIRED", "DECISION_REPLAYED",
+        "DECISION_SIGNATURE_INVALID", "DUPLICATE_PAYMENT", "COOLOFF_ELAPSED", "INVOICE_NOT_EXTRACTED",
+        "HARD_RULE_FAILED", "PAYEE_CHANGED", "FUNDS_UNAVAILABLE", "WARNING_NOT_ACKNOWLEDGED",
+        "BANK_UNAVAILABLE", "INTEL_UNAVAILABLE",
+        "SIGNATURE_INVALID", "REQUEST_EXPIRED", "NONCE_REPLAYED",
+        "QUOTA_EXCEEDED", "UNKNOWN_EPOCH", "MEMBER_SUSPENDED", "RECEIPT_INVALID", "RECEIPT_TOO_OLD",
+        "PAYEE_MISMATCH", "PAYER_NOT_MEMBER", "DUPLICATE_REPORT", "NOT_REPORTER",
+        "INSUFFICIENT_FUNDS", "ACCOUNT_NOT_FOUND"
+      ]
+    },
+    "errors": {
+      "type": "array",
+      "description": "Field-level validation errors (VALIDATION_FAILED only).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["loc", "msg"],
+        "properties": {
+          "loc": { "type": "array", "items": { "type": ["string", "integer"] } },
+          "msg": { "type": "string", "maxLength": 500 }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "type": "urn:safepay:problem:SELF_APPROVAL",
+      "title": "Initiator cannot approve their own payment",
+      "status": 409,
+      "code": "SELF_APPROVAL",
+      "detail": "User 6f1e... initiated payment aaaaaaaa-...; a different approver is required.",
+      "instance": "/api/v1/payments/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee/approve"
+    }
+  ]
+}

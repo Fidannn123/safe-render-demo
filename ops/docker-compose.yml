@@ -1,0 +1,210 @@
+# SafePay local stack. One command on a clean machine: `make up` (or
+# `docker compose -f ops/docker-compose.yml up -d --build --wait`). No cloud dependency.
+# All data is SYNTHETIC; the bank is SIMULATED. Ports bind to 127.0.0.1 only.
+name: safepay
+
+x-python: &python
+  image: safepay/python:dev
+  build:
+    context: ..
+    dockerfile: ops/docker/python.Dockerfile
+  restart: unless-stopped
+  volumes:
+    - ./dev-keys:/run/secrets/safepay:ro
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+x-db-env: &db-env
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+services:
+  keygen:
+    image: safepay/python:dev
+    build:
+      context: ..
+      dockerfile: ops/docker/python.Dockerfile
+    user: "${SAFEPAY_UID:-0}:${SAFEPAY_GID:-0}"
+    command: ["python", "/app/ops/scripts/gen_dev_keys.py", "/run/secrets/safepay"]
+    volumes:
+      - ./dev-keys:/run/secrets/safepay
+    restart: "no"
+
+  postgres:
+    image: postgres:18.6-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/safepay/secrets/postgres_superuser_password
+      SAFEPAY_SECRETS_DIR: /run/secrets/safepay/secrets
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./dev-keys:/run/secrets/safepay:ro
+    ports:
+      - "127.0.0.1:${SAFEPAY_PG_PORT:-55432}:5432"
+    depends_on:
+      keygen:
+        condition: service_completed_successfully
+    healthcheck:
+      # TCP check: the entrypoint's init phase listens on the unix socket only, so this turns
+      # healthy only after 01-init.sh has created the three databases and roles.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+
+  migrate:
+    <<: *python
+    restart: "no"
+    working_dir: /app
+    environment:
+      <<: *db-env
+    command: ["sh", "/app/ops/scripts/migrate_all.sh"]
+
+  core-web:
+    <<: *python
+    volumes:
+      - ./dev-keys:/run/secrets/safepay:ro
+      - coredata:/var/lib/safepay
+      # GET /api/v1/evidence/metrics serves the bundle `make evidence` writes on the host.
+      - ../evidence:/app/evidence:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    working_dir: /app/core
+    environment:
+      <<: *db-env
+      DJANGO_SETTINGS_MODULE: safepay_core.settings.prod
+      DJANGO_SECRET_KEY_FILE: /run/secrets/safepay/secrets/core_django_secret_key
+      DB_NAME: safepay_core
+      DB_USER: safepay_core_app
+      DB_PASSWORD_FILE: /run/secrets/safepay/secrets/core_app_db_password
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,core-web
+      DJANGO_CSRF_TRUSTED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080
+      SAFEPAY_MODE: ${SAFEPAY_MODE:-demo}
+      SAFEPAY_LLM: ${SAFEPAY_LLM:-mock}
+      SAFEPAY_LLM_MODEL: ${SAFEPAY_LLM_MODEL:-claude-sonnet-5-5}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      SAFEPAY_INTEL_URL: http://intel:8001
+      SAFEPAY_BANK_URL: http://bank:8002
+      SAFEPAY_KEYSTORE_DIR: /var/lib/safepay/tenant-keys
+      SAFEPAY_MEMBER_KEYS_DIR: /var/lib/safepay/members
+    command: ["gunicorn", "safepay_core.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2", "--access-logfile", "-"]
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).status == 200 else 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  core-worker:
+    <<: *python
+    volumes:
+      - ./dev-keys:/run/secrets/safepay:ro
+      - coredata:/var/lib/safepay
+    working_dir: /app/core
+    environment:
+      <<: *db-env
+      DJANGO_SETTINGS_MODULE: safepay_core.settings.prod
+      DJANGO_SECRET_KEY_FILE: /run/secrets/safepay/secrets/core_django_secret_key
+      DB_NAME: safepay_core
+      DB_USER: safepay_core_app
+      DB_PASSWORD_FILE: /run/secrets/safepay/secrets/core_app_db_password
+      SAFEPAY_MODE: ${SAFEPAY_MODE:-demo}
+      SAFEPAY_LLM: ${SAFEPAY_LLM:-mock}
+      SAFEPAY_LLM_MODEL: ${SAFEPAY_LLM_MODEL:-claude-sonnet-5-5}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      SAFEPAY_INTEL_URL: http://intel:8001
+      SAFEPAY_BANK_URL: http://bank:8002
+      SAFEPAY_KEYSTORE_DIR: /var/lib/safepay/tenant-keys
+      SAFEPAY_MEMBER_KEYS_DIR: /var/lib/safepay/members
+    command: ["python", "manage.py", "outbox_worker"]
+    depends_on:
+      core-web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,sys,time; p='/tmp/safepay-worker.heartbeat'; sys.exit(0 if os.path.exists(p) and time.time()-os.path.getmtime(p) < 30 else 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+  intel:
+    <<: *python
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    working_dir: /app/intel
+    environment:
+      <<: *db-env
+      DJANGO_SETTINGS_MODULE: safepay_intel.settings.prod
+      DJANGO_SECRET_KEY_FILE: /run/secrets/safepay/secrets/intel_django_secret_key
+      DB_NAME: safepay_intel
+      DB_USER: safepay_intel_app
+      DB_PASSWORD_FILE: /run/secrets/safepay/secrets/intel_app_db_password
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,intel
+    command: ["gunicorn", "safepay_intel.wsgi:application", "--bind", "0.0.0.0:8001", "--workers", "2", "--access-logfile", "-"]
+    ports:
+      - "127.0.0.1:8001:8001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8001/healthz', timeout=3).status == 200 else 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  bank:
+    <<: *python
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    working_dir: /app/bank_sandbox
+    environment:
+      <<: *db-env
+      DJANGO_SETTINGS_MODULE: safepay_bank.settings.prod
+      DJANGO_SECRET_KEY_FILE: /run/secrets/safepay/secrets/bank_django_secret_key
+      DB_NAME: safepay_bank
+      DB_USER: safepay_bank_app
+      DB_PASSWORD_FILE: /run/secrets/safepay/secrets/bank_app_db_password
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,bank
+    command: ["gunicorn", "safepay_bank.wsgi:application", "--bind", "0.0.0.0:8002", "--workers", "2", "--access-logfile", "-"]
+    ports:
+      - "127.0.0.1:8002:8002"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8002/healthz', timeout=3).status == 200 else 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  console:
+    image: safepay/console:dev
+    build:
+      context: ..
+      dockerfile: ops/docker/console.Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      core-web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata:
+  coredata:

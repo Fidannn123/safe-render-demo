@@ -1,0 +1,70 @@
+# SafePay double-entry ledger. FROZEN at G0. Source: docs/architecture.md section 2.4.
+# Conventions:
+#  * Amounts are BIGINT minor units with an ISO-4217 currency. Never floats.
+#  * A posting's amount_minor is signed: positive = DEBIT, negative = CREDIT.
+#  * Every journal entry sums to zero per currency: deferred constraint trigger at COMMIT.
+#  * Account balance = sum(postings) for debit-normal accounts, -sum(postings) for credit-normal.
+#  * Ledger tables are INSERT-only for the app role (UPDATE/DELETE revoked + trigger raises).
+#  * Accounts are per tenant. <vendor> / <customer> are registry UUIDs.
+version: 1
+
+accounts:
+  "Bank:available":  { type: asset,     normal: debit,  non_negative: true, description: "Spendable cash (mirrors sandbox bank balance minus reserved/in-transit)" }
+  "Bank:reserved":   { type: asset,     normal: debit,  non_negative: true, description: "Earmarked for cleared/approved payments" }
+  "Bank:in_transit": { type: asset,     normal: debit,  non_negative: true, description: "Submitted to bank, awaiting receipt" }
+  "AP:<vendor>":     { type: liability, normal: credit, non_negative: false, description: "Accounts payable per vendor" }
+  "Expense":         { type: expense,   normal: debit,  non_negative: false, description: "Operating expenses" }
+  "COGS":            { type: expense,   normal: debit,  non_negative: false, description: "Cost of goods sold" }
+  # Added at G0 to support forecast, DSO and opening balances (DECISIONS.md D-010; review):
+  "AR:<customer>":   { type: asset,     normal: debit,  non_negative: false, description: "Accounts receivable per customer (synthetic twins)" }
+  "Revenue":         { type: income,    normal: credit, non_negative: false, description: "Sales revenue (synthetic twins)" }
+  "Equity:opening":  { type: equity,    normal: credit, non_negative: false, description: "Opening balance contra account" }
+
+# Posting templates. {expense_account} is the vendor's registry setting: Expense or COGS.
+# Each template is one journal entry; lines: [account, side]; all lines use the same amount.
+templates:
+  invoice_accepted:
+    description: "Invoice accepted (extraction validated, vendor bound to registry)"
+    trigger: "RECEIVED -> EXTRACTED"
+    lines: [["{expense_account}", debit], ["AP:<vendor>", credit]]
+  reserve:
+    description: "Reserve funds for an ALLOW/GUARDED decision or final human approval"
+    trigger: "CLEARED -> RESERVED, APPROVED -> RESERVED"
+    lines: [["Bank:reserved", debit], ["Bank:available", credit]]
+  submit:
+    description: "Outbox delivered the transfer to the bank adapter"
+    trigger: "RESERVED -> SUBMITTED"
+    lines: [["Bank:in_transit", debit], ["Bank:reserved", credit]]
+  settle:
+    description: "Bank-signed SETTLED receipt verified"
+    trigger: "SUBMITTED -> SETTLED"
+    lines: [["AP:<vendor>", debit], ["Bank:in_transit", credit]]
+  release_in_transit:
+    description: "Bank failure: funds released"
+    trigger: "SUBMITTED -> FAILED"
+    lines: [["Bank:available", debit], ["Bank:in_transit", credit]]
+  release_reserved:
+    description: "T2 owner veto: funds released"
+    trigger: "RESERVED -> FAILED"
+    lines: [["Bank:available", debit], ["Bank:reserved", credit]]
+  invoice_voided:
+    description: "Reverse an accrued invoice (D-004). Always a NEW balanced journal entry; ledger rows are never edited"
+    trigger: "PROPOSED -> DENIED; HELD -> REJECTED with reject_reason fraud_or_invalid (only if invoice_accepted was posted)"
+    lines: [["AP:<vendor>", debit], ["{expense_account}", credit]]
+  # Synthetic-twin flows outside the payment state machine (D-010):
+  opening_balance:
+    description: "Opening bank balance of a twin"
+    trigger: "seed"
+    lines: [["Bank:available", debit], ["Equity:opening", credit]]
+  ar_invoice_issued:
+    description: "Customer invoice issued by the SME"
+    trigger: "seed / sim"
+    lines: [["AR:<customer>", debit], ["Revenue", credit]]
+  customer_receipt:
+    description: "Customer paid (bank CREDIT line, matched by end_to_end_id)"
+    trigger: "sim + recon"
+    lines: [["Bank:available", debit], ["AR:<customer>", credit]]
+  direct_debit_opex:
+    description: "Recurring opex debited directly by the bank (rent, utilities, payroll)"
+    trigger: "sim + recon"
+    lines: [["Expense", debit], ["Bank:available", credit]]

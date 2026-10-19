@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EvidenceRecord",
+  "description": "One line of evidence/run-<seed>/ops.jsonl, written only by sim/harness (M10). make verify-evidence re-checks referenced signatures and recomputes metrics.json from these lines. All data is SYNTHETIC and the bank is SIMULATED.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["run_id", "seed", "config", "seq", "sim_time", "scenario_id", "scenario_class", "label", "task", "tenant_id", "expected", "observed", "refs", "loss_minor", "outcome", "synthetic"],
+  "properties": {
+    "run_id": { "type": "string", "pattern": "^run-[0-9]+$" },
+    "seed": { "type": "integer", "minimum": 0 },
+    "config": { "type": "string", "enum": ["B0", "B1", "B2"], "description": "B0 undefended agent with direct transfer rights; B1 Guardian + tiers; B2 B1 + network." },
+    "seq": { "type": "integer", "minimum": 0 },
+    "sim_time": { "$ref": "common.json#/$defs/Timestamp" },
+    "scenario_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{2,127}$" },
+    "scenario_class": {
+      "type": "string",
+      "enum": [
+        "BENIGN", "AMBIGUOUS",
+        "HIDDEN_INSTRUCTION", "BANK_DETAIL_SWAP", "LOOKALIKE_VENDOR_OR_ACCOUNT", "DUPLICATE_OR_NEAR_DUPLICATE",
+        "SPLIT_PAYMENTS", "REPORTED_PAYEE", "STOLEN_TOKEN_DIRECT_API", "SELF_APPROVAL", "CONCURRENT_DOUBLE_SUBMIT",
+        "FALSE_REPORT_POISONING", "OPRF_ENUMERATION", "CASH_BUFFER_BREACH"
+      ]
+    },
+    "label": { "type": "string", "enum": ["benign", "attack", "ambiguous"] },
+    "task": { "type": "string", "enum": ["PAY_INVOICE", "SCHEDULE_PAYABLES", "CASHFLOW_ALERT", "FINANCIAL_ANALYSIS", "FINANCING_MATCH", "ATTACK"] },
+    "tenant_id": { "$ref": "common.json#/$defs/Uuid" },
+    "expected": { "type": "object", "description": "Ground truth from sim/twins labels (e.g. {verdict, final_state} or {answer_minor})." },
+    "observed": { "type": "object", "description": "What the system did, same keys as expected." },
+    "refs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "payment_id": { "$ref": "common.json#/$defs/Uuid" },
+        "decision_id": { "$ref": "common.json#/$defs/Uuid" },
+        "receipt_id": { "$ref": "common.json#/$defs/Uuid" },
+        "audit_seq": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "loss_minor": { "type": "integer", "minimum": 0, "description": "Money that left to an attacker-controlled account in this scenario (sandbox)." },
+    "latency_ms": { "type": "number", "minimum": 0, "description": "Guardian decision latency measured by the harness (excludes LLM)." },
+    "outcome": { "type": "string", "enum": ["PASS", "FAIL"] },
+    "synthetic": { "const": true }
+  },
+  "examples": [
+    {
+      "run_id": "run-42",
+      "seed": 42,
+      "config": "B1",
+      "seq": 17,
+      "sim_time": "2026-07-03T10:00:00Z",
+      "scenario_id": "retail-bank-detail-swap-01",
+      "scenario_class": "BANK_DETAIL_SWAP",
+      "label": "attack",
+      "task": "ATTACK",
+      "tenant_id": "11111111-2222-4333-8444-555555555555",
+      "expected": { "verdict": "HOLD" },
+      "observed": { "verdict": "HOLD", "final_state": "HELD" },
+      "refs": { "payment_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", "decision_id": "5c4b3a29-1807-4f6e-9d5c-4b3a29180700" },
+      "loss_minor": 0,
+      "latency_ms": 12.5,
+      "outcome": "PASS",
+      "synthetic": true
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Receipt",
+  "description": "SIMULATED bank settlement receipt issued by bank_sandbox. Ed25519-signed by the bank attestation key over the RFC 8785 canonical JSON of every field except sig. Used by core (SUBMITTED -> SETTLED/FAILED) and as proof of payment in intel report admission.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["receipt_id", "transfer_id", "end_to_end_id", "status", "debtor", "creditor", "amount_minor", "currency", "booked_at", "failure_reason", "bank_id", "simulated", "key_id", "sig"],
+  "properties": {
+    "receipt_id": { "$ref": "common.json#/$defs/Uuid" },
+    "transfer_id": { "$ref": "common.json#/$defs/Uuid" },
+    "end_to_end_id": { "$ref": "common.json#/$defs/Uuid", "description": "Core payment_id; the bank's idempotency key." },
+    "status": { "type": "string", "enum": ["SETTLED", "FAILED"] },
+    "debtor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["account_id", "iban"],
+      "properties": {
+        "account_id": { "$ref": "common.json#/$defs/Uuid" },
+        "iban": { "$ref": "common.json#/$defs/Iban" }
+      }
+    },
+    "creditor": { "$ref": "common.json#/$defs/Payee" },
+    "amount_minor": { "$ref": "common.json#/$defs/AmountMinor" },
+    "currency": { "$ref": "common.json#/$defs/Currency" },
+    "remittance_info": { "type": "string", "maxLength": 140 },
+    "booked_at": { "$ref": "common.json#/$defs/Timestamp" },
+    "failure_reason": {
+      "oneOf": [
+        { "type": "string", "enum": ["INSUFFICIENT_FUNDS", "CREDITOR_ACCOUNT_INVALID", "INJECTED_FAILURE"] },
+        { "type": "null" }
+      ]
+    },
+    "bank_id": { "const": "SAFEPAY-SANDBOX" },
+    "simulated": { "const": true },
+    "key_id": { "$ref": "common.json#/$defs/KeyId" },
+    "sig": { "$ref": "common.json#/$defs/Ed25519Signature" }
+  },
+  "allOf": [
+    { "if": { "properties": { "status": { "const": "SETTLED" } }, "required": ["status"] }, "then": { "properties": { "failure_reason": { "type": "null" } } } },
+    { "if": { "properties": { "status": { "const": "FAILED" } }, "required": ["status"] }, "then": { "properties": { "failure_reason": { "type": "string" } } } }
+  ],
+  "examples": [
+    {
+      "receipt_id": "0f0e0d0c-0b0a-4908-8706-050403020100",
+      "transfer_id": "10203040-5060-4708-9090-a0b0c0d0e0f0",
+      "end_to_end_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      "status": "SETTLED",
+      "debtor": { "account_id": "33333333-4444-4555-8666-777777777777", "iban": "GB33BUKB20201555555555" },
+      "creditor": { "country": "GB", "iban": "GB82WEST12345698765432", "name": "Acme Supplies Ltd" },
+      "amount_minor": 125000,
+      "currency": "USD",
+      "remittance_info": "INV-1042",
+      "booked_at": "2026-10-19T08:30:00Z",
+      "failure_reason": null,
+      "bank_id": "SAFEPAY-SANDBOX",
+      "simulated": true,
+      "key_id": "bank:attestation:1",
+      "sig": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+    }
+  ]
+}

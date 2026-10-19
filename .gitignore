@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# Node / console
+node_modules/
+console/dist/
+console/packages/*/dist/
+console/packages/api-client/src/generated/
+package-lock.json
+yarn.lock
+
+# Secrets and generated keys (never commit)
+.env
+.env.*
+!.env.example
+ops/dev-keys/*
+!ops/dev-keys/README.md
+
+# Evidence is generated only
+evidence/*
+!evidence/README.md
+!evidence/schema/
+evidence/schema/*
+!evidence/schema/README.md
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+.venv/
+node_modules/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/

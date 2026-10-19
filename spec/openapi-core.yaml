@@ -1,0 +1,1149 @@
+openapi: 3.1.0
+info:
+  title: SafePay core API
+  version: 1.0.0
+  summary: Tenant domain of SafePay (FROZEN at G0).
+  description: |
+    Cash-flow-safe payables copilot for SMEs. All data in this prototype is SYNTHETIC and the bank is SIMULATED.
+
+    Conventions:
+    * Money: integer minor units (`*_minor`, int64) plus ISO-4217 `currency`. Never floats. Demo currency USD.
+    * Decimal quantities (rates, day counts) are decimal strings, rounded half-even to the stated places.
+    * Errors: RFC 9457 `application/problem+json` (schemas/Problem.json). `x-problem-codes` lists the typed
+      codes (spec/errors.yaml) each operation may return.
+    * Every mutating POST requires `Idempotency-Key` (UNIQUE(tenant, key); stores request SHA-256 and the
+      response; replay returns the stored response; different body -> 409 IDEMPOTENCY_MISMATCH), except the
+      operations marked `x-idempotency: exempt`.
+    * Humans authenticate with a session cookie + CSRF header; agents with a bearer token
+      (256-bit random, stored as HMAC-SHA256(pepper, token), scopes T0-T2, TTL <= 3600 s).
+      `x-roles` lists human roles; `x-agent-scopes` lists token scopes allowed (absent = agents forbidden,
+      403 FORBIDDEN_SCOPE). `x-step-up: true` requires a fresh OTP (<= 300 s, else 403 STEP_UP_REQUIRED).
+    * All data is tenant-scoped (PostgreSQL RLS); resources of other tenants return 404 NOT_FOUND.
+  license:
+    name: Proprietary (FinTechathon 2026 entry)
+servers:
+  - url: http://localhost:8000
+    description: docker compose (core-web)
+tags:
+  - name: health
+  - name: auth
+  - name: vendors
+  - name: invoices
+  - name: agent
+  - name: payments
+  - name: tenants
+  - name: cashflow
+
+paths:
+  /healthz:
+    get:
+      operationId: core_healthz
+      tags: [health]
+      summary: Liveness and database connectivity.
+      security: []
+      responses:
+        "200":
+          description: Healthy.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+        "503":
+          description: Degraded (database unreachable).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+
+  /api/v1/auth/login:
+    post:
+      operationId: auth_login
+      tags: [auth]
+      summary: Password (Argon2id) + TOTP login for humans. Starts a session; counts as a step-up.
+      security: []
+      x-idempotency: exempt
+      x-problem-codes: [VALIDATION_FAILED, UNAUTHENTICATED, ACCOUNT_LOCKED, RATE_LIMITED]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Logged in; Set-Cookie sessionid (Secure, HttpOnly, SameSite=Lax) and csrftoken.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "423": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+
+  /api/v1/auth/logout:
+    post:
+      operationId: auth_logout
+      tags: [auth]
+      summary: End the session.
+      security: [{ session: [], csrf: [] }]
+      x-idempotency: exempt
+      x-roles: [owner, approver, accountant]
+      x-problem-codes: [UNAUTHENTICATED]
+      responses:
+        "204": { description: Logged out. }
+        "401": { $ref: "#/components/responses/Problem" }
+
+  /api/v1/auth/step-up:
+    post:
+      operationId: auth_step_up
+      tags: [auth]
+      summary: Fresh TOTP for sensitive actions (valid step_up_otp_max_age_seconds).
+      security: [{ session: [], csrf: [] }]
+      x-idempotency: exempt
+      x-roles: [owner, approver, accountant]
+      x-problem-codes: [UNAUTHENTICATED, VALIDATION_FAILED, RATE_LIMITED]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StepUpRequest" }
+      responses:
+        "200":
+          description: Step-up recorded.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+
+  /api/v1/auth/agent-tokens:
+    post:
+      operationId: agent_token_issue
+      tags: [auth]
+      summary: Issue an agent token (owner + step-up). The plaintext token is returned once.
+      security: [{ session: [], csrf: [] }]
+      x-roles: [owner]
+      x-step-up: true
+      x-problem-codes: [UNAUTHENTICATED, FORBIDDEN_SCOPE, STEP_UP_REQUIRED, VALIDATION_FAILED, IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_MISMATCH, TENANT_FROZEN]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AgentTokenCreate" }
+      responses:
+        "201":
+          description: Issued.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AgentTokenIssued" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "423": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+
+  /api/v1/auth/agent-tokens/{token_id}:
+    delete:
+      operationId: agent_token_revoke
+      tags: [auth]
+      summary: Revoke an agent token (owner or approver). Idempotent.
+      security: [{ session: [], csrf: [] }]
+      x-roles: [owner, approver]
+      x-problem-codes: [UNAUTHENTICATED, FORBIDDEN_SCOPE, NOT_FOUND]
+      parameters:
+        - $ref: "#/components/parameters/TokenId"
+      responses:
+        "204": { description: Revoked. }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /api/v1/vendors:
+    get:
+      operationId: vendors_list
+      tags: [vendors]
+      summary: Vendor registry (account numbers masked).
+      security: [{ session: [] }, { agentToken: [] }]
+      x-roles: [owner, approver, accountant]
+      x-agent-scopes: [T0, T1, T2]
+      x-problem-codes: [UNAUTHENTICATED]
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string, maxLength: 140 }, description: "Name search (deterministic, case-insensitive)." }
+      responses:
+        "200":
+          description: Vendors.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 1000
+                items: { $ref: "#/components/schemas/Vendor" }
+        "401": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: vendors_create
+      tags: [vendors]
+      summary: Create a vendor without a bank account (owner + step-up). Accounts are added only via bank-account-change.
+      security: [{ session: [], csrf: [] }]
+      x-roles: [owner]
+      x-step-up: true
+      x-problem-codes: [UNAUTHENTICATED, FORBIDDEN_SCOPE, STEP_UP_REQUIRED, VALIDATION_FAILED, IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_MISMATCH]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VendorCreate" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vendor" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+
+  /api/v1/vendors/{vendor_id}:
+    get:
+      operationId: vendors_get
+      tags: [vendors]
+      summary: One vendor with its verified account (masked). The agent's lookup_vendor tool.
+      security: [{ session: [] }, { agentToken: [] }]
+      x-roles: [owner, approver, accountant]
+      x-agent-scopes: [T0, T1, T2]
+      x-problem-codes: [UNAUTHENTICATED, NOT_FOUND]
+      parameters:
+        - $ref: "#/components/parameters/VendorId"
+      responses:
+        "200":
+          description: Vendor.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vendor" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /api/v1/vendors/{vendor_id}/bank-account-change:
+    post:
+      operationId: vendor_bank_change_request
+      tags: [vendors]
+      summary: Request a registry bank-account change (owner + step-up + call-back attestation). Needs a second person to confirm.
+      security: [{ session: [], csrf: [] }]
+      x-roles: [owner]
+      x-step-up: true
+      x-problem-codes: [UNAUTHENTICATED, FORBIDDEN_SCOPE, STEP_UP_REQUIRED, VALIDATION_FAILED, REASON_REQUIRED, NOT_FOUND, IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_MISMATCH]
+      parameters:
+        - $ref: "#/components/parameters/VendorId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BankAccountChangeRequest" }
+      responses:
+        "201":
+          description: Change pending second-person confirmation.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BankAccountChange" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+
+  /api/v1/vendors/{vendor_id}/bank-account-change/{change_id}/confirm:
+    post:
+      operationId: vendor_bank_change_confirm
+      tags: [vendors]
+      summary: Second person confirms with their own call-back attestation (confirmer != requester). Applies the change; the account becomes new/changed for new_or_changed_window_days.
+      security: [{ session: [], csrf: [] }]
+      x-roles: [owner, approver]
+      x-step-up: true
+      x-problem-codes: [UNAUTHENTICATED, FORBIDDEN_SCOPE, STEP_UP_REQUIRED, SECOND_PERSON_REQUIRED, VALIDATION_FAILED, REASON_REQUIRED, NOT_FOUND, ILLEGAL_TRANSITION, IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_MISMATCH]
+      parameters:
+        - $ref: "#/components/parameters/VendorId"
+        - $ref: "#/components/parameters/ChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BankAccountChangeConfirm" }
+      responses:
+        "200":
+          description: Applied.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BankAccountChange" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+
+  /api/v1/invoices:
+    post:
+      operationId: invoices_ingest
+      tags: [invoices]
+      summary: Ingest an untrusted invoice (email/PDF). Creates a payment in RECEIVED; extraction runs asynchronously via the outbox worker.
+      security: [{ session: [], csrf: [] }, { agentToken: [] }]
+      x-roles: [owner, approver, accountant]
+      x-agent-scopes: [T0, T1, T2]
+      x-problem-codes: [UNAUTHENTICATED, VALIDATION_FAILED, IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_MISMATCH, IDEMPOTENCY_IN_PROGRESS, RATE_LIMITED]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "./schemas/Invoice.json" }
+      responses:
+        "201":
+          description: Accepted for extraction.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvoiceRecord" }
+        "200":
+          description: Idempotent replay of an earlier identical request.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvoiceRecord" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+
+  /api/v1/agent/proposals:
+    post:
+      operationId: agent_propose_payment
+      tags: [agent]
+      summary: propose_payment. Runs the Guardian and returns the signed Decision. ALLOW/GUARDED reserve funds in the same transaction.
+      security: [{ agentToken: [] }]
+      x-agent-scopes: [T1, T2]
+      x-problem-codes: [UNAUTHENTICATED, FORBIDDEN_SCOPE, VALIDATION_FAILED, NOT_FOUND, INVOICE_NOT_EXTRACTED, ILLEGAL_TRANSITION, DUPLICATE_PAYMENT, IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_MISMATCH, IDEMPOTENCY_IN_PROGRESS, RATE_LIMITED]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "./schemas/Proposal.json" }
+      responses:
+        "201":
+          description: Decision issued (any verdict, including DENY and HOLD).
+          content:
+            application/json:
+              schema: { $ref: "./schemas/Decision.json" }
+        "200":
+          description: Idempotent replay; same Decision as before.
+          content:
+            application/json:
+              schema: { $ref: "./schemas/Decision.json" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+
+  /api/v1/payments:
+    get:
+      operationId: payments_list
+      tags: [payments]
+      summary: Payments (approvals queue = state=HELD).
+      security: [{ session: [] }, { agentToken: [] }]
+      x-roles: [owner, approver, accountant]
+      x-agent-scopes: [T0, T1, T2]
+      x-problem-codes: [UNAUTHENTICATED, VALIDATION_FAILED]
+      parameters:
+        - { name: state, in: query, required: false, schema: { $ref: "./schemas/common.json#/$defs/PaymentState" } }
+        - { name: cursor, in: query, required: false, schema: { type: string, maxLength: 256 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        "200":
+          description: Page of payments, newest first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentPage" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /api/v1/payments/{payment_id}:
+    get:
+      operationId: payments_get
+      tags: [payments]
+      summary: One payment with its transition history (the agent's get_status tool).
+      security: [{ session: [] }, { agentToken: [] }]
+      x-roles: [owner, approver, accountant]
+      x-agent-scopes: [T0, T1, T2]
+      x-problem-codes: [UNAUTHENTICATED, NOT_FOUND]
+      parameters:
+        - $ref: "#/components/parameters/PaymentId"
+      responses:
+        "200":
+          description: Payment.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payment" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /api/v1/payments/{payment_id}/approve:
+    post:
+      operationId: payments_approve
+      tags: [payments]
+      summary: Approve a HELD payment (approver != initiator, step-up, reason). Agent caps are NOT re-applied. The final required approval re-checks hard rules, freeze, payee account (vs inputs_sha256) and funds under the tenant-limits row lock, then moves HELD -> APPROVED -> RESERVED atomically. Every Payment.approval_warnings code must be acknowledged.
+      security: [{ session: [], csrf: [] }]
+      x-roles: [owner, approver]
+      x-step-up: true
+      x-problem-codes: [UNAUTHENTICATED, FORBIDDEN_SCOPE, STEP_UP_REQUIRED, SELF_APPROVAL, ALREADY_APPROVED_BY_USER, REASON_REQUIRED, ILLEGAL_TRANSITION, TENANT_FROZEN, NOT_FOUND, HARD_RULE_FAILED, PAYEE_CHANGED, FUNDS_UNAVAILABLE, WARNING_NOT_ACKNOWLEDGED, IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_MISMATCH]
+      parameters:
+        - $ref: "#/components/parameters/PaymentId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ApproveBody" }
+      responses:
+        "200":
+          description: Approval recorded (payment HELD if more approvals needed, else RESERVED).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payment" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "423": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+
+  /api/v1/payments/{payment_id}/reject:
+    post:
+      operationId: payments_reject
+      tags: [payments]
+      summary: Reject a HELD payment (step-up, reason, reject_reason). fraud_or_invalid reverses the AP accrual with a new journal entry and marks the payee reportable; not_now keeps the accrual open and the invoice may be proposed again.
+      security: [{ session: [], csrf: [] }]
+      x-roles: [owner, approver]
+      x-step-up: true
+      x-problem-codes: [UNAUTHENTICATED, FORBIDDEN_SCOPE, STEP_UP_REQUIRED, REASON_REQUIRED, ILLEGAL_TRANSITION, NOT_FOUND, IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_MISMATCH]
+      parameters:
+        - $ref: "#/components/parameters/PaymentId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RejectBody" }
+      responses:
+        "200":
+          description: Rejected.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payment" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+
+  /api/v1/payments/{payment_id}/veto:
+    post:
+      operationId: payments_veto
+      tags: [payments]
+      summary: Owner veto of a T2 (GUARDED) payment during its cool-off. RESERVED -> FAILED, funds released.
+      security: [{ session: [], csrf: [] }]
+      x-roles: [owner]
+      x-step-up: true
+      x-problem-codes: [UNAUTHENTICATED, FORBIDDEN_SCOPE, STEP_UP_REQUIRED, REASON_REQUIRED, ILLEGAL_TRANSITION, COOLOFF_ELAPSED, NOT_FOUND, IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_MISMATCH]
+      parameters:
+        - $ref: "#/components/parameters/PaymentId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReasonBody" }
+      responses:
+        "200":
+          description: Vetoed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payment" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+
+  /api/v1/decisions/{decision_id}:
+    get:
+      operationId: decisions_get
+      tags: [payments]
+      summary: A signed Decision (for the decision explainer and offline verification).
+      security: [{ session: [] }, { agentToken: [] }]
+      x-roles: [owner, approver, accountant]
+      x-agent-scopes: [T0, T1, T2]
+      x-problem-codes: [UNAUTHENTICATED, NOT_FOUND]
+      parameters:
+        - $ref: "#/components/parameters/DecisionId"
+      responses:
+        "200":
+          description: Decision.
+          content:
+            application/json:
+              schema: { $ref: "./schemas/Decision.json" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /api/v1/tenants/{tenant_id}/freeze:
+    post:
+      operationId: tenants_freeze
+      tags: [tenants]
+      summary: T4 emergency freeze (owner or approver; the reconciler freezes automatically). Revokes all agent tokens. Idempotent.
+      security: [{ session: [], csrf: [] }]
+      x-roles: [owner, approver]
+      x-problem-codes: [UNAUTHENTICATED, FORBIDDEN_SCOPE, REASON_REQUIRED, NOT_FOUND, IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_MISMATCH]
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReasonBody" }
+      responses:
+        "200":
+          description: Frozen (or already frozen).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantStatus" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+
+  /api/v1/tenants/{tenant_id}/unfreeze:
+    post:
+      operationId: tenants_unfreeze
+      tags: [tenants]
+      summary: Lift a T4 freeze (owner + step-up). Idempotent.
+      security: [{ session: [], csrf: [] }]
+      x-roles: [owner]
+      x-step-up: true
+      x-problem-codes: [UNAUTHENTICATED, FORBIDDEN_SCOPE, STEP_UP_REQUIRED, REASON_REQUIRED, NOT_FOUND, IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_MISMATCH]
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReasonBody" }
+      responses:
+        "200":
+          description: Unfrozen (or already unfrozen).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantStatus" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "428": { $ref: "#/components/responses/Problem" }
+
+  /api/v1/cashflow/forecast:
+    get:
+      operationId: cashflow_forecast
+      tags: [cashflow]
+      summary: Deterministic 13-week forecast with buffer test and source rows (the agent's get_forecast tool).
+      security: [{ session: [] }, { agentToken: [] }]
+      x-roles: [owner, approver, accountant]
+      x-agent-scopes: [T0, T1, T2]
+      x-problem-codes: [UNAUTHENTICATED, VALIDATION_FAILED]
+      parameters:
+        - { name: as_of, in: query, required: false, schema: { $ref: "./schemas/common.json#/$defs/Date" }, description: "Defaults to today (UTC)." }
+      responses:
+        "200":
+          description: Forecast.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Forecast" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /api/v1/cashflow/schedule:
+    get:
+      operationId: cashflow_schedule
+      tags: [cashflow]
+      summary: Payables schedule (pay on due date; early only if discount APR > hurdle; deferrals on SHORTFALL).
+      security: [{ session: [] }, { agentToken: [] }]
+      x-roles: [owner, approver, accountant]
+      x-agent-scopes: [T0, T1, T2]
+      x-problem-codes: [UNAUTHENTICATED, VALIDATION_FAILED]
+      parameters:
+        - { name: as_of, in: query, required: false, schema: { $ref: "./schemas/common.json#/$defs/Date" } }
+      responses:
+        "200":
+          description: Schedule.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayablesSchedule" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /api/v1/analysis/{metric}:
+    get:
+      operationId: analysis_metric
+      tags: [cashflow]
+      summary: Deterministic financial analysis from ledger aggregates (the agent's get_analysis tool).
+      security: [{ session: [] }, { agentToken: [] }]
+      x-roles: [owner, approver, accountant]
+      x-agent-scopes: [T0, T1, T2]
+      x-problem-codes: [UNAUTHENTICATED, VALIDATION_FAILED]
+      parameters:
+        - { name: metric, in: path, required: true, schema: { type: string, enum: [DPO, DSO, BURN, TOP_VENDORS] } }
+        - { name: from, in: query, required: false, schema: { $ref: "./schemas/common.json#/$defs/Date" } }
+        - { name: to, in: query, required: false, schema: { $ref: "./schemas/common.json#/$defs/Date" } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 50, default: 5 }, description: "TOP_VENDORS only." }
+      responses:
+        "200":
+          description: Result with source rows.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnalysisResult" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /api/v1/alerts:
+    get:
+      operationId: alerts_list
+      tags: [cashflow]
+      summary: Cash-flow (LOW_BUFFER, SHORTFALL) and operational alerts.
+      security: [{ session: [] }, { agentToken: [] }]
+      x-roles: [owner, approver, accountant]
+      x-agent-scopes: [T0, T1, T2]
+      x-problem-codes: [UNAUTHENTICATED, VALIDATION_FAILED]
+      parameters:
+        - { name: status, in: query, required: false, schema: { type: string, enum: [OPEN, ACKED, RESOLVED] } }
+      responses:
+        "200":
+          description: Alerts, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 1000
+                items: { $ref: "#/components/schemas/Alert" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /api/v1/financing/match:
+    post:
+      operationId: financing_match
+      tags: [cashflow]
+      summary: Rank SYNTHETIC catalog financing products for a shortfall by total cost (the agent's match_financing tool). Pure computation, no side effects.
+      security: [{ session: [], csrf: [] }, { agentToken: [] }]
+      x-roles: [owner, approver, accountant]
+      x-agent-scopes: [T0, T1, T2]
+      x-idempotency: exempt
+      x-problem-codes: [UNAUTHENTICATED, VALIDATION_FAILED]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FinancingMatchRequest" }
+      responses:
+        "200":
+          description: Ranked options (eligible first, then by total_cost_minor ascending).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FinancingMatchResult" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: sessionid
+      description: Django session (Secure, HttpOnly, SameSite=Lax; 30 min idle, 12 h absolute for approvers).
+    csrf:
+      type: apiKey
+      in: header
+      name: X-CSRFToken
+      description: Required with the session cookie on unsafe methods.
+    agentToken:
+      type: http
+      scheme: bearer
+      bearerFormat: "spa_<43 base64url chars> (256-bit random)"
+      description: Agent token. Scopes T0 (read), T1 (auto), T2 (guarded). Never T3/T4.
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 16, maxLength: 128, pattern: "^[A-Za-z0-9._:-]+$" }
+      description: Client-generated unique key (e.g. UUIDv4). UNIQUE per tenant.
+    PaymentId:
+      name: payment_id
+      in: path
+      required: true
+      schema: { $ref: "./schemas/common.json#/$defs/Uuid" }
+    DecisionId:
+      name: decision_id
+      in: path
+      required: true
+      schema: { $ref: "./schemas/common.json#/$defs/Uuid" }
+    VendorId:
+      name: vendor_id
+      in: path
+      required: true
+      schema: { $ref: "./schemas/common.json#/$defs/Uuid" }
+    ChangeId:
+      name: change_id
+      in: path
+      required: true
+      schema: { $ref: "./schemas/common.json#/$defs/Uuid" }
+    TenantId:
+      name: tenant_id
+      in: path
+      required: true
+      schema: { $ref: "./schemas/common.json#/$defs/Uuid" }
+    TokenId:
+      name: token_id
+      in: path
+      required: true
+      schema: { $ref: "./schemas/common.json#/$defs/Uuid" }
+
+  responses:
+    Problem:
+      description: RFC 9457 problem details; see x-problem-codes of the operation.
+      content:
+        application/problem+json:
+          schema: { $ref: "./schemas/Problem.json" }
+
+  schemas:
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status, service, db]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        service: { type: string, enum: [core, intel, bank] }
+        db: { type: string, enum: [ok, unavailable] }
+
+    Role:
+      type: string
+      enum: [owner, approver, accountant]
+
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password, otp]
+      properties:
+        username: { type: string, minLength: 1, maxLength: 150 }
+        password: { type: string, minLength: 12, maxLength: 1024, writeOnly: true }
+        otp: { type: string, pattern: "^[0-9]{6}$", writeOnly: true }
+
+    StepUpRequest:
+      type: object
+      additionalProperties: false
+      required: [otp]
+      properties:
+        otp: { type: string, pattern: "^[0-9]{6}$", writeOnly: true }
+
+    Session:
+      type: object
+      additionalProperties: false
+      required: [user_id, tenant_id, roles, step_up_valid_until]
+      properties:
+        user_id: { $ref: "./schemas/common.json#/$defs/Uuid" }
+        tenant_id: { $ref: "./schemas/common.json#/$defs/Uuid" }
+        roles: { type: array, minItems: 1, uniqueItems: true, items: { $ref: "#/components/schemas/Role" } }
+        step_up_valid_until: { $ref: "./schemas/common.json#/$defs/Timestamp" }
+
+    AgentTokenCreate:
+      type: object
+      additionalProperties: false
+      required: [name, scopes]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        scopes: { type: array, minItems: 1, uniqueItems: true, items: { $ref: "./schemas/common.json#/$defs/TokenScope" } }
+        ttl_seconds: { type: integer, minimum: 60, maximum: 3600, default: 3600 }
+
+    AgentTokenIssued:
+      type: object
+      additionalProperties: false
+      required: [token_id, token, scopes, expires_at]
+      properties:
+        token_id: { $ref: "./schemas/common.json#/$defs/Uuid" }
+        token: { type: string, pattern: "^spa_[A-Za-z0-9_-]{43}$", description: "Shown once; only HMAC-SHA256(pepper, token) is stored." }
+        scopes: { type: array, items: { $ref: "./schemas/common.json#/$defs/TokenScope" } }
+        expires_at: { $ref: "./schemas/common.json#/$defs/Timestamp" }
+
+    BankAccountView:
+      type: object
+      additionalProperties: false
+      required: [account_id, country, iban_masked, holder_name, verified_at, first_used_at, changed_at, is_new_or_changed]
+      properties:
+        account_id: { $ref: "./schemas/common.json#/$defs/Uuid" }
+        country: { $ref: "./schemas/common.json#/$defs/Country" }
+        iban_masked: { type: string, pattern: "^[A-Z]{2}[0-9]{2}\\*+[A-Z0-9]{4}$", description: "Country, check digits, last 4 characters." }
+        holder_name: { type: string, maxLength: 140 }
+        verified_at: { $ref: "./schemas/common.json#/$defs/Timestamp" }
+        first_used_at: { oneOf: [ { $ref: "./schemas/common.json#/$defs/Timestamp" }, { type: "null" } ] }
+        changed_at: { $ref: "./schemas/common.json#/$defs/Timestamp" }
+        is_new_or_changed: { type: boolean, description: "first use or change < new_or_changed_window_days ago." }
+
+    Vendor:
+      type: object
+      additionalProperties: false
+      required: [vendor_id, name, status, expense_account, criticality, verified_account, created_at]
+      properties:
+        vendor_id: { $ref: "./schemas/common.json#/$defs/Uuid" }
+        name: { type: string, maxLength: 140 }
+        tax_id: { type: string, maxLength: 64 }
+        status: { type: string, enum: [ACTIVE, BLOCKED] }
+        expense_account: { type: string, enum: [Expense, COGS] }
+        criticality: { type: string, enum: [LOW, MEDIUM, HIGH], description: "Used to order deferrals on SHORTFALL." }
+        late_fee_bp: { type: integer, minimum: 0, maximum: 10000, description: "Late fee in basis points of the invoice amount." }
+        verified_account: { oneOf: [ { $ref: "#/components/schemas/BankAccountView" }, { type: "null" } ] }
+        created_at: { $ref: "./schemas/common.json#/$defs/Timestamp" }
+
+    VendorCreate:
+      type: object
+      additionalProperties: false
+      required: [name, expense_account, criticality]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 140 }
+        tax_id: { type: string, maxLength: 64 }
+        expense_account: { type: string, enum: [Expense, COGS] }
+        criticality: { type: string, enum: [LOW, MEDIUM, HIGH] }
+        late_fee_bp: { type: integer, minimum: 0, maximum: 10000, default: 0 }
+
+    CallbackAttestation:
+      type: object
+      additionalProperties: false
+      required: [number_source, called_at, spoke_with, outcome]
+      description: Human attests they phoned the vendor on a number NOT taken from the change request.
+      properties:
+        number_source: { type: string, enum: [REGISTRY_ON_FILE, SIGNED_CONTRACT, OFFICIAL_WEBSITE] }
+        called_at: { $ref: "./schemas/common.json#/$defs/Timestamp" }
+        spoke_with: { type: string, minLength: 1, maxLength: 140 }
+        outcome: { const: CONFIRMED }
+
+    BankAccountChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [new_account, callback_attestation, reason]
+      properties:
+        new_account:
+          type: object
+          additionalProperties: false
+          required: [country, iban, holder_name]
+          properties:
+            country: { $ref: "./schemas/common.json#/$defs/Country" }
+            iban: { $ref: "./schemas/common.json#/$defs/Iban" }
+            holder_name: { type: string, minLength: 1, maxLength: 140 }
+        callback_attestation: { $ref: "#/components/schemas/CallbackAttestation" }
+        reason: { type: string, minLength: 3, maxLength: 500 }
+
+    BankAccountChangeConfirm:
+      type: object
+      additionalProperties: false
+      required: [callback_attestation, reason]
+      properties:
+        callback_attestation: { $ref: "#/components/schemas/CallbackAttestation" }
+        reason: { type: string, minLength: 3, maxLength: 500 }
+
+    BankAccountChange:
+      type: object
+      additionalProperties: false
+      required: [change_id, vendor_id, status, requested_by, requested_at, confirmed_by, confirmed_at, new_account_masked]
+      properties:
+        change_id: { $ref: "./schemas/common.json#/$defs/Uuid" }
+        vendor_id: { $ref: "./schemas/common.json#/$defs/Uuid" }
+        status: { type: string, enum: [PENDING_CONFIRMATION, APPLIED, CANCELLED] }
+        requested_by: { $ref: "./schemas/common.json#/$defs/Uuid" }
+        requested_at: { $ref: "./schemas/common.json#/$defs/Timestamp" }
+        confirmed_by: { oneOf: [ { $ref: "./schemas/common.json#/$defs/Uuid" }, { type: "null" } ] }
+        confirmed_at: { oneOf: [ { $ref: "./schemas/common.json#/$defs/Timestamp" }, { type: "null" } ] }
+        new_account_masked: { type: string, pattern: "^[A-Z]{2}[0-9]{2}\\*+[A-Z0-9]{4}$" }
+
+    InvoiceRecord:
+      type: object
+      additionalProperties: false
+      required: [invoice_id, payment_id, state, received_at, extracted]
+      properties:
+        invoice_id: { $ref: "./schemas/common.json#/$defs/Uuid" }
+        payment_id: { $ref: "./schemas/common.json#/$defs/Uuid" }
+        state: { $ref: "./schemas/common.json#/$defs/PaymentState" }
+        received_at: { $ref: "./schemas/common.json#/$defs/Timestamp" }
+        extracted: { oneOf: [ { $ref: "./schemas/ExtractedInvoice.json" }, { type: "null" } ] }
+
+    Transition:
+      type: object
+      additionalProperties: false
+      required: [from, to, trigger, at, actor, audit_seq]
+      properties:
+        from: { oneOf: [ { $ref: "./schemas/common.json#/$defs/PaymentState" }, { type: "null" } ] }
+        to: { $ref: "./schemas/common.json#/$defs/PaymentState" }
+        trigger: { type: string, maxLength: 64 }
+        at: { $ref: "./schemas/common.json#/$defs/Timestamp" }
+        actor: { $ref: "./schemas/common.json#/$defs/Actor" }
+        audit_seq: { type: integer, minimum: 1 }
+
+    Approval:
+      type: object
+      additionalProperties: false
+      required: [approver_id, action, reason, at]
+      properties:
+        approver_id: { $ref: "./schemas/common.json#/$defs/Uuid" }
+        action: { type: string, enum: [APPROVE, REJECT, VETO] }
+        reason: { type: string, maxLength: 500 }
+        reject_reason: { oneOf: [ { $ref: "#/components/schemas/RejectReason" }, { type: "null" } ] }
+        acknowledged_warnings: { type: array, items: { $ref: "#/components/schemas/ApprovalWarningCode" } }
+        at: { $ref: "./schemas/common.json#/$defs/Timestamp" }
+
+    Payment:
+      type: object
+      additionalProperties: false
+      required: [payment_id, invoice_id, state, vendor_id, account_id, amount_minor, currency, reference, due_date, tier, decision_id, initiated_by, approvals, approvals_required, approval_warnings, reject_reason, payee_reportable, cooloff_until, history, created_at, updated_at]
+      properties:
+        payment_id: { $ref: "./schemas/common.json#/$defs/Uuid" }
+        invoice_id: { $ref: "./schemas/common.json#/$defs/Uuid" }
+        state: { $ref: "./schemas/common.json#/$defs/PaymentState" }
+        vendor_id: { oneOf: [ { $ref: "./schemas/common.json#/$defs/Uuid" }, { type: "null" } ] }
+        account_id: { oneOf: [ { $ref: "./schemas/common.json#/$defs/Uuid" }, { type: "null" } ] }
+        amount_minor: { oneOf: [ { $ref: "./schemas/common.json#/$defs/AmountMinor" }, { type: "null" } ] }
+        currency: { oneOf: [ { $ref: "./schemas/common.json#/$defs/Currency" }, { type: "null" } ] }
+        reference: { type: [string, "null"], maxLength: 64 }
+        due_date: { oneOf: [ { $ref: "./schemas/common.json#/$defs/Date" }, { type: "null" } ] }
+        tier: { oneOf: [ { $ref: "./schemas/common.json#/$defs/Tier" }, { type: "null" } ] }
+        decision_id: { oneOf: [ { $ref: "./schemas/common.json#/$defs/Uuid" }, { type: "null" } ] }
+        initiated_by: { oneOf: [ { $ref: "./schemas/common.json#/$defs/Actor" }, { type: "null" } ] }
+        approvals: { type: array, items: { $ref: "#/components/schemas/Approval" } }
+        approvals_required: { type: integer, minimum: 0, maximum: 2, description: "2 when amount_minor >= two_approver_threshold." }
+        approval_warnings: { type: array, items: { $ref: "#/components/schemas/ApprovalWarning" }, description: "Shown to approvers; each must be acknowledged." }
+        reject_reason: { oneOf: [ { $ref: "#/components/schemas/RejectReason" }, { type: "null" } ] }
+        payee_reportable: { type: boolean, description: "True after a fraud_or_invalid rejection; enables an intel report with the bank receipt." }
+        cooloff_until: { oneOf: [ { $ref: "./schemas/common.json#/$defs/Timestamp" }, { type: "null" } ], description: "T2 only: veto possible until then." }
+        history: { type: array, items: { $ref: "#/components/schemas/Transition" } }
+        created_at: { $ref: "./schemas/common.json#/$defs/Timestamp" }
+        updated_at: { $ref: "./schemas/common.json#/$defs/Timestamp" }
+
+    PaymentPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/Payment" } }
+        next_cursor: { type: [string, "null"], maxLength: 256 }
+
+    ApproveBody:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 3, maxLength: 500 }
+        acknowledged_warnings:
+          type: array
+          uniqueItems: true
+          default: []
+          items: { $ref: "#/components/schemas/ApprovalWarningCode" }
+          description: Must include every code in Payment.approval_warnings, else 409 WARNING_NOT_ACKNOWLEDGED.
+
+    RejectBody:
+      type: object
+      additionalProperties: false
+      required: [reason, reject_reason]
+      properties:
+        reason: { type: string, minLength: 3, maxLength: 500 }
+        reject_reason: { $ref: "#/components/schemas/RejectReason" }
+
+    RejectReason:
+      type: string
+      enum: [fraud_or_invalid, not_now]
+
+    ApprovalWarningCode:
+      type: string
+      enum: [CASH_BUFFER_BREACH]
+
+    ApprovalWarning:
+      type: object
+      additionalProperties: false
+      required: [code, detail]
+      properties:
+        code: { $ref: "#/components/schemas/ApprovalWarningCode" }
+        detail: { type: string, maxLength: 500, description: "Deterministic template text." }
+
+    ReasonBody:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 3, maxLength: 500 }
+
+    TenantStatus:
+      type: object
+      additionalProperties: false
+      required: [tenant_id, frozen, frozen_at, frozen_by, reason]
+      properties:
+        tenant_id: { $ref: "./schemas/common.json#/$defs/Uuid" }
+        frozen: { type: boolean }
+        frozen_at: { oneOf: [ { $ref: "./schemas/common.json#/$defs/Timestamp" }, { type: "null" } ] }
+        frozen_by: { oneOf: [ { $ref: "./schemas/common.json#/$defs/Actor" }, { type: "null" } ] }
+        reason: { type: [string, "null"], maxLength: 500 }
+
+    SourceRow:
+      type: object
+      additionalProperties: false
+      required: [kind, id, amount_minor, date]
+      description: A row a deterministic number was computed from (numbers are never LLM-generated).
+      properties:
+        kind: { type: string, enum: [journal_entry, payment, ar_invoice, recurring_opex, bank_balance] }
+        id: { type: string, maxLength: 128 }
+        amount_minor: { $ref: "./schemas/common.json#/$defs/SignedAmountMinor" }
+        date: { $ref: "./schemas/common.json#/$defs/Date" }
+
+    ForecastWeek:
+      type: object
+      additionalProperties: false
+      required: [week_index, week_start, opening_minor, inflows_minor, outflows_minor, closing_minor, status]
+      properties:
+        week_index: { type: integer, minimum: 0, maximum: 12 }
+        week_start: { $ref: "./schemas/common.json#/$defs/Date" }
+        opening_minor: { $ref: "./schemas/common.json#/$defs/SignedAmountMinor" }
+        inflows_minor: { type: integer, minimum: 0 }
+        outflows_minor: { type: integer, minimum: 0 }
+        closing_minor: { $ref: "./schemas/common.json#/$defs/SignedAmountMinor" }
+        status: { type: string, enum: [OK, LOW_BUFFER, SHORTFALL], description: "SHORTFALL if closing < 0; LOW_BUFFER if closing < buffer." }
+
+    Forecast:
+      type: object
+      additionalProperties: false
+      required: [as_of, currency, opening_balance_minor, buffer_minor, weeks, sources]
+      properties:
+        as_of: { $ref: "./schemas/common.json#/$defs/Date" }
+        currency: { $ref: "./schemas/common.json#/$defs/Currency" }
+        opening_balance_minor: { $ref: "./schemas/common.json#/$defs/SignedAmountMinor" }
+        buffer_minor: { type: integer, minimum: 0 }
+        weeks: { type: array, minItems: 13, maxItems: 13, items: { $ref: "#/components/schemas/ForecastWeek" } }
+        sources: { type: array, maxItems: 100000, items: { $ref: "#/components/schemas/SourceRow" } }
+
+    ScheduleItem:
+      type: object
+      additionalProperties: false
+      required: [invoice_id, vendor_id, amount_minor, due_date, pay_on, reason, discount_apr, late_fee_minor]
+      properties:
+        invoice_id: { $ref: "./schemas/common.json#/$defs/Uuid" }
+        payment_id: { $ref: "./schemas/common.json#/$defs/Uuid" }
+        vendor_id: { $ref: "./schemas/common.json#/$defs/Uuid" }
+        amount_minor: { $ref: "./schemas/common.json#/$defs/AmountMinor" }
+        due_date: { $ref: "./schemas/common.json#/$defs/Date" }
+        pay_on: { $ref: "./schemas/common.json#/$defs/Date" }
+        reason: { type: string, enum: [DUE_DATE, EARLY_DISCOUNT, DEFERRED_SHORTFALL] }
+        discount_apr: { type: [string, "null"], pattern: "^[0-9]+\\.[0-9]{4}$", description: "Decimal string, 4 places." }
+        late_fee_minor: { type: [integer, "null"], minimum: 0 }
+
+    PayablesSchedule:
+      type: object
+      additionalProperties: false
+      required: [as_of, currency, items, buffer_breach]
+      properties:
+        as_of: { $ref: "./schemas/common.json#/$defs/Date" }
+        currency: { $ref: "./schemas/common.json#/$defs/Currency" }
+        items: { type: array, maxItems: 10000, items: { $ref: "#/components/schemas/ScheduleItem" } }
+        buffer_breach: { type: boolean, description: "True if paying as scheduled would breach the buffer in any week." }
+
+    AnalysisResult:
+      type: object
+      additionalProperties: false
+      required: [metric, period_from, period_to, value, unit, items, source_rows]
+      properties:
+        metric: { type: string, enum: [DPO, DSO, BURN, TOP_VENDORS] }
+        period_from: { $ref: "./schemas/common.json#/$defs/Date" }
+        period_to: { $ref: "./schemas/common.json#/$defs/Date" }
+        value: { type: [string, "null"], pattern: "^-?[0-9]+(\\.[0-9]{1,2})?$", description: "Decimal string (DPO/DSO days, 1 place; BURN minor units per 30 days, integer). null for TOP_VENDORS." }
+        unit: { type: string, enum: [days, minor_per_30_days, list] }
+        currency: { $ref: "./schemas/common.json#/$defs/Currency" }
+        items:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            additionalProperties: false
+            required: [vendor_id, name, amount_minor]
+            properties:
+              vendor_id: { $ref: "./schemas/common.json#/$defs/Uuid" }
+              name: { type: string, maxLength: 140 }
+              amount_minor: { type: integer, minimum: 0 }
+        source_rows: { type: array, maxItems: 100000, items: { $ref: "#/components/schemas/SourceRow" } }
+
+    Alert:
+      type: object
+      additionalProperties: false
+      required: [alert_id, type, severity, week_start, amount_minor, created_at, status, detail]
+      properties:
+        alert_id: { $ref: "./schemas/common.json#/$defs/Uuid" }
+        type: { type: string, enum: [LOW_BUFFER, SHORTFALL, MISSING_IN_BANK, RECON_MISMATCH, OUTBOX_INCIDENT, TENANT_FROZEN] }
+        severity: { type: string, enum: [INFO, WARN, CRITICAL] }
+        week_start: { oneOf: [ { $ref: "./schemas/common.json#/$defs/Date" }, { type: "null" } ] }
+        amount_minor: { oneOf: [ { $ref: "./schemas/common.json#/$defs/SignedAmountMinor" }, { type: "null" } ] }
+        created_at: { $ref: "./schemas/common.json#/$defs/Timestamp" }
+        status: { type: string, enum: [OPEN, ACKED, RESOLVED] }
+        detail: { type: string, maxLength: 500, description: "Deterministic template text; the LLM may only rephrase it." }
+
+    FinancingMatchRequest:
+      type: object
+      additionalProperties: false
+      required: [shortfall_minor, currency, needed_by]
+      properties:
+        shortfall_minor: { $ref: "./schemas/common.json#/$defs/AmountMinor" }
+        currency: { $ref: "./schemas/common.json#/$defs/Currency" }
+        needed_by: { $ref: "./schemas/common.json#/$defs/Date" }
+        max_term_days: { type: integer, minimum: 1, maximum: 1825 }
+
+    FinancingOption:
+      type: object
+      additionalProperties: false
+      required: [product_id, provider_name, type, amount_minor, term_days, apr, fees_minor, total_cost_minor, eligible, ineligibility_reasons, rank]
+      properties:
+        product_id: { type: string, pattern: "^[a-z0-9-]{3,64}$" }
+        provider_name: { type: string, maxLength: 140, description: "SYNTHETIC provider." }
+        type: { type: string, enum: [OVERDRAFT, INVOICE_FINANCING, SHORT_TERM_LOAN] }
+        amount_minor: { $ref: "./schemas/common.json#/$defs/AmountMinor" }
+        term_days: { type: integer, minimum: 1 }
+        apr: { type: string, pattern: "^[0-9]+\\.[0-9]{4}$" }
+        fees_minor: { type: integer, minimum: 0 }
+        total_cost_minor: { type: integer, minimum: 0, description: "Interest over term + fees, rounded half-even to minor units." }
+        eligible: { type: boolean }
+        ineligibility_reasons: { type: array, items: { type: string, enum: [AMOUNT_TOO_LOW, AMOUNT_TOO_HIGH, TERM_TOO_SHORT, TERM_TOO_LONG, NO_RECEIVABLES, MIN_HISTORY, SECTOR_EXCLUDED] } }
+        rank: { type: [integer, "null"], minimum: 1, description: "1 = best eligible option; null if ineligible." }
+
+    FinancingMatchResult:
+      type: object
+      additionalProperties: false
+      required: [ranked_by, synthetic_catalog, options]
+      properties:
+        ranked_by: { const: total_cost_minor }
+        synthetic_catalog: { const: true }
+        options: { type: array, minItems: 3, maxItems: 3, items: { $ref: "#/components/schemas/FinancingOption" }, description: "Exactly the 3 synthetic catalog products (one OVERDRAFT, one INVOICE_FINANCING, one SHORT_TERM_LOAN), eligible first then by total_cost_minor (D-030)." }
