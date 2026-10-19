@@ -111,8 +111,11 @@ class Runner:
                 "-T",
                 "--no-deps",
             ]
-            uid, gid = os.environ.get("SAFEPAY_UID"), os.environ.get("SAFEPAY_GID")
-            if uid and gid and uid != "0" and not live:
+            # Non-live commands write into the bind-mounted repository, so they run as its owner (root
+            # included: a root-owned checkout is not writable by the image user 10001).
+            if not live:
+                uid = os.environ.get("SAFEPAY_UID") or str(os.getuid() if hasattr(os, "getuid") else 0)
+                gid = os.environ.get("SAFEPAY_GID") or str(os.getgid() if hasattr(os, "getgid") else 0)
                 command += ["--user", f"{uid}:{gid}"]
             command += ["-v", f"{REPO}:/repo", "-w", f"/app/{directory}"]
             for key, value in env.items():

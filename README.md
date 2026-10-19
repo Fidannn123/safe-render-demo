@@ -43,7 +43,7 @@ Run `run-42` (demo mode, LLM=mock, policy 2026.10.19-1). SYNTHETIC data, SIMULAT
 | Benign task success | 100.0% | 100.0% | 100.0% |
 | False holds on benign payments | 0.0% | 0.0% | 0.0% |
 | Ambiguous invoices held | 100.0% | 100.0% | 100.0% |
-| Decision latency p50 / p95 | not measured / not measured | 44.9 ms / 257.2 ms | 57.6 ms / 286.5 ms |
+| Decision latency p50 / p95 | not measured / not measured | 87.5 ms / 131.6 ms | 91.5 ms / 147.3 ms |
 
 Fraud network: 1 of 2 reported-payee scenarios stopped before payment with the network (B2), 0 without it (B1).
 Full report with every residual attack: `evidence/run-42/EVIDENCE.md` (generated). Re-check signatures and numbers offline with `make verify-evidence SEED=42`.
