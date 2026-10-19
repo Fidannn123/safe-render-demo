@@ -159,6 +159,7 @@ def compute(
         "privacy": {
             "captured_query_requests": privacy["captured_query_requests"],
             "query_requests_containing_an_iban": privacy["query_requests_containing_an_iban"],
+            **({"operator_attack": privacy["operator_attack"]} if "operator_attack" in privacy else {}),
         },
         "residual_attacks": {
             c: [

@@ -111,6 +111,7 @@ def render(metrics: dict[str, Any], run: dict[str, Any], verified: dict[str, Any
         f"detection lift {pct(metrics['network_detection_lift'])}.",
         f"- Blind queries captured: {metrics['privacy']['captured_query_requests']}; "
         f"queries containing any IBAN: {metrics['privacy']['query_requests_containing_an_iban']}.",
+        *operator_attack(metrics),
         "",
         "## Verification",
         "",
@@ -183,3 +184,16 @@ def readme_status(path: Path, metrics: dict[str, Any]) -> str:
     if block == readme_block(metrics):
         return "in_sync"
     return "stale" if f"Run `{metrics['run_id']}`" in block else "other_run"
+
+
+def operator_attack(metrics: dict[str, Any]) -> list[str]:
+    attack = metrics["privacy"].get("operator_attack")
+    if not attack:
+        return ["- Operator privacy attack: not run for this bundle."]
+    return [
+        f"- Operator privacy attack (server transcript + every epoch key + {attack['candidates_checked']:,} "
+        f"candidate IBANs): {attack['recovered_identifiers']} identifiers recovered, "
+        f"{attack['repeated_blinded_elements']} repeated blinded elements across "
+        f"{attack['blinded_elements']} sent. Control (a client sending SHA-256 of the IBAN): "
+        f"{attack['control_recovered_identifiers']} of {attack['true_payees']} payees recovered.",
+    ]

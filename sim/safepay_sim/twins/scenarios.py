@@ -69,10 +69,10 @@ DESIGN: dict[str, Design] = {
     "split_known#2": _same("ALLOW"),
     "split_known#3": _same("GUARDED", "SPLIT_PATTERN"),
     "split_new#1": _same("GUARDED", "NEW_OR_CHANGED_PAYEE"),
-    "split_new#2": _same("GUARDED", "NEW_OR_CHANGED_PAYEE"),
-    "split_new#3": _same("HOLD", "OVER_NEW_PAYEE_ROLLING_24H_CAP"),
+    "split_new#2": _same("HOLD", "SPLIT_PATTERN", "NEW_OR_CHANGED_PAYEE"),
+    "split_new#3": _same("HOLD", "SPLIT_PATTERN", "NEW_OR_CHANGED_PAYEE"),
     "reported_2plus": (("GUARDED", ("NEW_OR_CHANGED_PAYEE",)), ("HOLD", ("NETWORK_REPORTED_2PLUS",))),
-    "reported_1": (("GUARDED", ("NEW_OR_CHANGED_PAYEE",)), ("GUARDED", ("NETWORK_REPORTED_1",))),
+    "reported_1": (("GUARDED", ("NEW_OR_CHANGED_PAYEE",)), ("HOLD", ("NETWORK_REPORTED_1",))),
     "breach": _same("HOLD", "CASH_BUFFER_BREACH"),
     "amb_over_tx": _same("HOLD", "OVER_PER_TX_CAP"),
     "amb_changed": _same("HOLD", "OVER_NEW_PAYEE_CAP", "NEW_OR_CHANGED_PAYEE"),
@@ -85,8 +85,8 @@ NON_INVOICE: dict[str, tuple[dict[str, object], dict[str, object], dict[str, obj
     # kind: (B0, B1, B2)
     "stolen_token": (
         {"outcome": "EXPOSED"},
-        {"outcome": "BLOCKED", "http_status": 403, "problem_code": "FORBIDDEN_SCOPE"},
-        {"outcome": "BLOCKED", "http_status": 403, "problem_code": "FORBIDDEN_SCOPE"},
+        {"outcome": "BLOCKED", "http_status": 403, "problem_code": "FORBIDDEN_SCOPE", "auto_freeze": True},
+        {"outcome": "BLOCKED", "http_status": 403, "problem_code": "FORBIDDEN_SCOPE", "auto_freeze": True},
     ),
     "self_approval": (
         {"outcome": "NOT_APPLICABLE"},
@@ -184,6 +184,14 @@ def typical_amount(rng: random.Random, twin: Twin, v: Vendor, lo: int = 930, hi:
         if z is not None and z * 2 <= 4:  # z <= 2: comfortably inside the 3.5 threshold
             return amount
     return sorted(history)[len(history) // 2]
+
+
+def _unremarkable(twin: Twin, vendor_id: str, amount: int) -> bool:
+    history = [p.amount_minor for p in twin.paid_ap(vendor_id)]
+    if len(history) < 5:
+        return True
+    z = robust_z(history, amount)
+    return z is not None and z * 2 <= 4
 
 
 def typical_amount_under(rng: random.Random, twin: Twin, v: Vendor, cap: int) -> int:
@@ -410,6 +418,11 @@ def build_drafts(  # noqa: PLR0912, PLR0915
                 and any(v.vendor_id == p.vendor_id for v in pool)
                 and p.issue_day >= AS_OF_DAY - 25
             ]
+            if kind == "dup_near":
+                # The re-sent amount must not also be an outlier for the vendor: DUPLICATE_SUSPECT
+                # is the signal under test, an accidental AMOUNT_ANOMALY would turn it into a HOLD.
+                calm = [p for p in cands if _unremarkable(twin, p.vendor_id, p.amount_minor)]
+                cands = calm or cands
             if not cands:
                 raise RuntimeError(f"{twin.key}: no recent paid invoice to duplicate")
             orig = max(cands, key=lambda p: (p.issue_day, p.invoice_id))

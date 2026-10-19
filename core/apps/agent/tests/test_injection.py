@@ -7,10 +7,11 @@ import uuid
 from types import SimpleNamespace
 from typing import Any
 
+import anthropic
 import pytest
 from pydantic import ValidationError
 
-from apps.agent.extractor import ExtractedInvoice, mock_extract
+from apps.agent.extractor import ExtractedInvoice, extract, mock_extract
 from apps.agent.service import plan_payment
 from apps.payments.errors import ProblemError
 
@@ -82,3 +83,72 @@ def test_model_output_with_extra_fields_is_rejected() -> None:
     output["pay_to_iban"] = ATTACKER_IBAN
     with pytest.raises(ValidationError):
         ExtractedInvoice.model_validate_json(json.dumps(output))
+
+
+class _Block:
+    def __init__(self, text: str) -> None:
+        self.type, self.text = "text", text
+
+
+class _FakeAnthropic:
+    """Stands in for anthropic.Anthropic: returns one canned response, records the request."""
+
+    response: Any = None
+    request: dict[str, Any] = {}  # noqa: RUF012
+
+    def __init__(self, **_: Any) -> None:
+        self.beta = SimpleNamespace(messages=SimpleNamespace(create=self._create))
+
+    def _create(self, **kwargs: Any) -> Any:
+        type(self).request = kwargs
+        return type(self).response
+
+
+def _model_output(**overrides: Any) -> str:
+    data = {
+        "vendor_name": "Synthetic Supplies Ltd",
+        "reference": "SSL-1001",
+        "amount_minor": 125000,
+        "currency": "USD",
+        "due_date": "2026-10-30",
+        "issue_date": None,
+        "vendor_tax_id": None,
+        "bank_details_on_invoice": {"country": "GB", "iban": ATTACKER_IBAN},
+        "early_payment_discount": None,
+    }
+    return json.dumps(data | overrides)
+
+
+@pytest.fixture
+def fake_provider(monkeypatch: pytest.MonkeyPatch, settings: Any) -> type[_FakeAnthropic]:
+    settings.SAFEPAY_LLM = "anthropic"
+    monkeypatch.setattr(anthropic, "Anthropic", _FakeAnthropic)
+    return _FakeAnthropic
+
+
+def test_real_provider_output_is_validated_and_never_picks_the_payee(fake_provider: Any) -> None:
+    fake_provider.response = SimpleNamespace(stop_reason="end_turn", content=[_Block(_model_output())])
+    invoice_id = uuid.uuid4()
+    extracted = extract(invoice_id, {"content_type": "text/plain", "body_text": HEADER + INJECTIONS[0]})
+    assert extracted.invoice_id == invoice_id
+    assert extracted.extractor["provider"] == "anthropic"
+    assert {i.provenance for i in extracted.untrusted_text} == {"untrusted"}
+    assert plan_payment(extracted, vendor())["account_id"] == str(REGISTRY_ACCOUNT)
+    request = fake_provider.request
+    assert "tools" not in request  # the extractor has no tools
+    assert request["output_config"]["format"]["type"] == "json_schema"
+    assert request["fallbacks"] == "default"
+
+
+@pytest.mark.parametrize("stop_reason", ["refusal", "max_tokens"])
+def test_real_provider_refusal_or_truncation_stops_extraction(fake_provider: Any, stop_reason: str) -> None:
+    fake_provider.response = SimpleNamespace(stop_reason=stop_reason, content=[])
+    with pytest.raises(ProblemError):
+        extract(uuid.uuid4(), {"content_type": "text/plain", "body_text": HEADER})
+
+
+def test_real_provider_cannot_smuggle_server_owned_fields(fake_provider: Any) -> None:
+    output = _model_output(extractor={"provider": "attacker"})
+    fake_provider.response = SimpleNamespace(stop_reason="end_turn", content=[_Block(output)])
+    with pytest.raises(ProblemError):
+        extract(uuid.uuid4(), {"content_type": "text/plain", "body_text": HEADER})

@@ -2,28 +2,21 @@
 
 from __future__ import annotations
 
-import base64
-import os
 import uuid
 
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from django.db import models
 from django.utils import timezone
 
-from apps.accounts.secrets import random_key
+from apps.keystore import pii
 
 
 def encrypt_iban(iban: str, tenant_id: uuid.UUID) -> str:
-    nonce = os.urandom(12)
-    encrypted = AESGCM(random_key("pii_aes256_key")).encrypt(nonce, iban.encode(), str(tenant_id).encode())
-    return base64.b64encode(nonce + encrypted).decode("ascii")
+    """Personal data at rest: AES-256-GCM under the tenant's own wrapped data key (D-047)."""
+    return pii.encrypt(iban, tenant_id)
 
 
 def decrypt_iban(value: str, tenant_id: uuid.UUID) -> str:
-    data = base64.b64decode(value)
-    return (
-        AESGCM(random_key("pii_aes256_key")).decrypt(data[:12], data[12:], str(tenant_id).encode()).decode()
-    )
+    return pii.decrypt(value, tenant_id)
 
 
 class Vendor(models.Model):

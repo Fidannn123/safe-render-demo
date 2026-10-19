@@ -88,6 +88,7 @@ def calibrate_stressed(twin: Twin, policy: Policy, rng: random.Random) -> Foreca
             opening += _ceil_to(base.buffer_minor + 4 * MARGIN_MINOR - min(pre), 10000)
             continue
         post_min = min(w.closing_minor for w in base.weeks[week:])
+        tried = False
         for num, den in fractions:
             target = base.buffer_minor * num // den
             if twin.spec.stress == "SHORTFALL":
@@ -95,6 +96,7 @@ def calibrate_stressed(twin: Twin, policy: Policy, rng: random.Random) -> Foreca
             amount = _ceil_to(post_min - target, 10000)
             if amount < 1000000:
                 continue
+            tried = True
             inv.amount_minor = amount
             inv.lines = [amount]
             fc = _forecast_with(twin, policy, opening)
@@ -102,7 +104,12 @@ def calibrate_stressed(twin: Twin, policy: Policy, rng: random.Random) -> Foreca
             wanted = bool(short) if twin.spec.stress == "SHORTFALL" else bool(low) and not short
             if wanted and _margins_ok(fc):
                 return fc
-        opening += 200000
+        if not tried:
+            # Without the payable the horizon already ends below the buffer (receivables run out), so
+            # no stress amount fits: lift the opening balance by that deficit at once (seeds 50, 90).
+            opening += _ceil_to(max(200000, base.buffer_minor + 1000000 - post_min), 10000)
+        else:
+            opening += 200000
     raise RuntimeError(f"{twin.key}: stressed calibration failed")  # pragma: no cover
 
 

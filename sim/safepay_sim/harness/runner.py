@@ -120,6 +120,9 @@ class Runner:
             command += ["-v", f"{REPO}:/repo", "-w", f"/app/{directory}"]
             for key, value in env.items():
                 command += ["-e", f"{key}={value}"]
+            for key in ("ANTHROPIC_API_KEY", "SAFEPAY_LLM_MODEL"):  # inherited by name, never on argv
+                if os.environ.get(key):
+                    command += ["-e", key]
             command += [compose_service, "python", "manage.py", *args]
             completed = subprocess.run(command, capture_output=True, text=True, check=False)  # noqa: S603
         if completed.returncode != 0:

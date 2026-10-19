@@ -21,6 +21,8 @@ from django.utils import timezone
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from apps.accounts.models import User
+from apps.audit.chain import verify_chain
+from apps.audit.models import AuditEvent
 from apps.bank_adapter.service import process_outbox
 from apps.ledger.service import post_template
 from apps.ledger.tenancy import tenant_transaction
@@ -196,3 +198,46 @@ def test_freeze_revokes_agent_tokens_and_unfreeze_needs_owner(workspace: dict[st
     status, body = call(owner, "POST", f"/tenants/{tenant}/unfreeze", {"reason": "drill over"})
     assert status == 200
     assert body["frozen"] is False
+
+
+def test_hijacked_agent_is_frozen_automatically_after_repeated_refusals(workspace: dict[str, Any]) -> None:
+    """D-046: the third refused request from one agent token freezes the tenant and revokes tokens."""
+    owner = login(workspace["users"]["owner"])
+    tenant = workspace["tenant"]
+    _, token = call(owner, "POST", "/auth/agent-tokens", {"name": "agent", "scopes": ["T0", "T1", "T2"]})
+    bearer = {"Authorization": f"Bearer {token['token']}"}
+    probes = [
+        ("POST", f"/tenants/{tenant}/unfreeze", {"reason": "agent"}),
+        ("POST", "/auth/agent-tokens", {"name": "x", "scopes": ["T2"]}),
+    ]
+    for method, path, body in probes:
+        status, _ = call(Client(), method, path, body, **bearer)
+        assert status == 403
+    _, status_body = call(owner, "GET", f"/tenants/{tenant}/status")
+    assert status_body["frozen"] is False  # two refusals: below the threshold
+    status, _ = call(Client(), "POST", "/vendors", {"name": "Attacker Ltd"}, **bearer)
+    assert status == 403
+    _, status_body = call(owner, "GET", f"/tenants/{tenant}/status")
+    assert status_body["frozen"] is True
+    assert status_body["frozen_by"] == {"type": "system", "id": "velocity-monitor"}
+    status, _ = call(Client(), "GET", "/payments", **bearer)
+    assert status == 401  # every agent token is revoked
+    with tenant_transaction(tenant):
+        refused = AuditEvent.objects.filter(tenant_id=tenant, action="AGENT_REQUEST_REFUSED").count()
+        assert verify_chain(tenant) >= refused == 3
+    status, body = call(owner, "POST", f"/tenants/{tenant}/unfreeze", {"reason": "token rotated"})
+    assert (status, body["frozen"]) == (200, False)
+
+
+def test_human_refusals_do_not_count_toward_the_velocity_freeze(workspace: dict[str, Any]) -> None:
+    tenant = workspace["tenant"]
+    accountant = User.objects.create_user(
+        f"accountant-{tenant}", password=PASSWORD, tenant_id=tenant, role="accountant"
+    )
+    TOTPDevice.objects.create(user=accountant, name="a", key="3132333435363738393031323334353637383930")
+    client = login(accountant)
+    for _ in range(4):
+        status, _ = call(client, "POST", f"/tenants/{workspace['tenant']}/freeze", {"reason": "x"})
+        assert status == 403
+    _, status_body = call(login(workspace["users"]["owner"]), "GET", f"/tenants/{workspace['tenant']}/status")
+    assert status_body["frozen"] is False

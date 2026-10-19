@@ -6,9 +6,7 @@ import base64
 import hashlib
 import io
 import json
-import os
 import re
-import urllib.request
 from datetime import date
 from decimal import Decimal
 from email import policy
@@ -131,29 +129,10 @@ def extract(invoice_id: UUID, source: dict[str, Any]) -> ExtractedInvoice:
         return mock_extract(invoice_id, text)
     if provider != "anthropic":
         raise ProblemError("VALIDATION_FAILED", "Unsupported extractor provider")
-    # Anthropic receives no tools, credentials, account registry or planner memory.
-    body = {
-        "model": settings.SAFEPAY_LLM_MODEL,
-        "max_tokens": 4000,
-        "system": PROMPT
-        + " Return only a JSON object matching this schema: "
-        + json.dumps(ExtractedInvoice.model_json_schema()),
-        "messages": [{"role": "user", "content": f"invoice_id={invoice_id}\n<invoice>{text}</invoice>"}],
-    }
-    request = urllib.request.Request(
-        "https://api.anthropic.com/v1/messages",
-        data=json.dumps(body).encode(),
-        method="POST",
-        headers={
-            "x-api-key": os.environ.get("ANTHROPIC_API_KEY", ""),
-            "anthropic-version": "2023-06-01",
-            "Content-Type": "application/json",
-        },
-    )
-    with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
-        result = json.load(response)
-    output = "".join(block.get("text", "") for block in result["content"] if block["type"] == "text")
-    parsed = ExtractedInvoice.model_validate_json(output)
+    facts = anthropic_extract(text)
+    if not set(facts) <= set(LLM_SCHEMA["properties"]):
+        raise ProblemError("VALIDATION_FAILED", "Extractor output has fields outside the schema")
+    parsed = ExtractedInvoice.model_validate({**facts, "invoice_id": str(invoice_id), "extractor": {}})
     # Server-owned provenance and ids cannot be overwritten by model output.
     return parsed.model_copy(
         update={
@@ -169,3 +148,84 @@ def extract(invoice_id: UUID, source: dict[str, Any]) -> ExtractedInvoice:
             },
         }
     )
+
+
+# What the model may return: facts only, every field typed. Server-owned fields (invoice_id, provenance,
+# extractor) are not part of it, so model output can never set them. Validated again by ExtractedInvoice.
+LLM_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "vendor_name",
+        "reference",
+        "amount_minor",
+        "currency",
+        "due_date",
+        "issue_date",
+        "vendor_tax_id",
+        "bank_details_on_invoice",
+        "early_payment_discount",
+    ],
+    "properties": {
+        "vendor_name": {"type": "string"},
+        "reference": {"type": "string"},
+        "amount_minor": {"type": "integer", "description": "Amount due in minor units (cents)."},
+        "currency": {"type": "string", "description": "ISO 4217 code, e.g. USD."},
+        "due_date": {"type": "string", "description": "YYYY-MM-DD"},
+        "issue_date": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "vendor_tax_id": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "bank_details_on_invoice": {
+            "anyOf": [
+                {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["country", "iban"],
+                    "properties": {"country": {"type": "string"}, "iban": {"type": "string"}},
+                },
+                {"type": "null"},
+            ]
+        },
+        "early_payment_discount": {
+            "anyOf": [
+                {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["discount_bp", "within_days"],
+                    "properties": {"discount_bp": {"type": "integer"}, "within_days": {"type": "integer"}},
+                },
+                {"type": "null"},
+            ]
+        },
+    },
+}
+
+
+def anthropic_extract(text: str) -> dict[str, Any]:
+    """One tool-free Messages API call with a JSON-schema output; the model sees only this invoice."""
+    import anthropic  # noqa: PLC0415 (optional at runtime: the default provider is the mock)
+
+    client = anthropic.Anthropic(max_retries=2, timeout=60.0)  # key from ANTHROPIC_API_KEY
+    try:
+        response = client.beta.messages.create(
+            model=settings.SAFEPAY_LLM_MODEL,
+            max_tokens=4000,
+            system=PROMPT + " Amounts are integers in minor units. Unknown optional fields are null.",
+            messages=[{"role": "user", "content": f"<invoice>{text}</invoice>"}],
+            output_config={"effort": "low", "format": {"type": "json_schema", "schema": LLM_SCHEMA}},
+            betas=["server-side-fallback-2026-07-01"],
+            fallbacks="default",
+        )
+    except anthropic.APIConnectionError as error:
+        raise ProblemError("VALIDATION_FAILED", "Extractor provider unreachable") from error
+    except anthropic.APIStatusError as error:
+        raise ProblemError("VALIDATION_FAILED", f"Extractor provider error {error.status_code}") from error
+    if response.stop_reason != "end_turn":  # refusal (after fallbacks), max_tokens, ...
+        raise ProblemError("VALIDATION_FAILED", f"Extractor stopped: {response.stop_reason}")
+    output = "".join(block.text for block in response.content if block.type == "text")
+    try:
+        data = json.loads(output)
+    except ValueError as error:
+        raise ProblemError("VALIDATION_FAILED", "Extractor returned invalid JSON") from error
+    if not isinstance(data, dict):
+        raise ProblemError("VALIDATION_FAILED", "Extractor returned a non-object")
+    return data

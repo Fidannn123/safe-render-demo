@@ -62,6 +62,8 @@ class Policy:
     split_min_count: int
     split_window_hours: int
     split_sum_exceeds: int
+    split_new_payee_min_count: int
+    split_new_payee_sum_exceeds: int
     anomaly_robust_z_threshold: Decimal
     anomaly_min_history: int
     hard_codes: tuple[str, ...]
@@ -106,6 +108,8 @@ def parse_policy(raw: dict[str, Any]) -> Policy:
     if tuple((r.id, r.verdict, r.tier) for r in rules) != EXPECTED_VERDICT_RULES:
         raise PolicyError("verdict_rules must be exactly R1-R5 (DECISIONS.md D-001)")
     split_cap_key = str(det["split_pattern"]["sum_exceeds"])
+    split_new = det["split_pattern"]["new_payee"]
+    split_new_cap_key = str(split_new["sum_exceeds"])
     approvals = raw["approvals"]
     return Policy(
         policy_version=str(raw["policy_version"]),
@@ -132,6 +136,8 @@ def parse_policy(raw: dict[str, Any]) -> Policy:
         split_min_count=_int(det["split_pattern"]["min_count"], "split min_count"),
         split_window_hours=_int(det["split_pattern"]["window_hours"], "split window_hours"),
         split_sum_exceeds=_int(caps[split_cap_key], f"split sum_exceeds {split_cap_key}"),
+        split_new_payee_min_count=_int(split_new["min_count"], "split new_payee min_count"),
+        split_new_payee_sum_exceeds=_int(caps[split_new_cap_key], f"split new_payee {split_new_cap_key}"),
         anomaly_robust_z_threshold=Decimal(str(det["amount_anomaly"]["robust_z_threshold"])),
         anomaly_min_history=_int(det["amount_anomaly"]["min_history"], "min_history"),
         hard_codes=hard,

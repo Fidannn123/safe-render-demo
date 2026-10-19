@@ -5,16 +5,17 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
-# Oracle: docs/BUILD_PLAN.md "Default policy values". Typed here on purpose: the test is the check.
+# Oracle: docs/BUILD_PLAN.md "Default policy values", as changed by DECISIONS.md D-045. Typed here on
+# purpose: the test is the check.
 DEFAULT_WEIGHTS = {
     "BANK_DETAIL_MISMATCH": 50,
     "LOOKALIKE_VENDOR": 50,
     "LOOKALIKE_ACCOUNT": 50,
     "NETWORK_REPORTED_2PLUS": 50,
-    "NETWORK_REPORTED_1": 25,
+    "NETWORK_REPORTED_1": 35,
     "INJECTION_MARKERS": 30,
     "DUPLICATE_SUSPECT": 30,
-    "SPLIT_PATTERN": 30,
+    "SPLIT_PATTERN": 35,
     "AMOUNT_ANOMALY": 20,
     "NEW_OR_CHANGED_PAYEE": 15,
 }
@@ -29,7 +30,7 @@ HARD = {
 
 
 def test_version(policy: Any) -> None:
-    assert policy["policy_version"] == "2026.10.19-1"
+    assert policy["policy_version"] == "2026.10.19-2"
 
 
 def test_default_values(policy: Any) -> None:

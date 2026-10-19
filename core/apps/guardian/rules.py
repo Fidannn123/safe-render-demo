@@ -238,10 +238,16 @@ def split_pattern(ctx: RuleContext) -> str | None:
     ]
     count = len(prior) + 1
     total = sum(h.amount_minor for h in prior) + p.amount_minor
-    if count >= ctx.policy.split_min_count and total > ctx.policy.split_sum_exceeds:
+    # A new or changed payee is split under the new-payee cap, so its thresholds are tighter (D-045).
+    min_count, cap = (
+        (ctx.policy.split_new_payee_min_count, ctx.policy.split_new_payee_sum_exceeds)
+        if ctx.new_or_changed
+        else (ctx.policy.split_min_count, ctx.policy.split_sum_exceeds)
+    )
+    if count >= min_count and total > cap:
         return (
             f"{count} payments to this payee within {ctx.policy.split_window_hours} h sum to {total}, "
-            f"over {ctx.policy.split_sum_exceeds} minor units."
+            f"over {cap} minor units."
         )
     return None
 

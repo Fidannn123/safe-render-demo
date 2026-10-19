@@ -142,7 +142,7 @@ SAFEPAY_KEYS_DIR = Path(env("SAFEPAY_KEYS_DIR", str(REPO_DIR / "ops" / "dev-keys
 # M2: file-backed dev KeyStore for per-tenant Decision/audit Ed25519 keys (KMS/HSM in production).
 SAFEPAY_KEYSTORE_DIR = Path(env("SAFEPAY_KEYSTORE_DIR", str(SAFEPAY_KEYS_DIR / "keystore")))
 SAFEPAY_LLM = env("SAFEPAY_LLM", "mock")  # mock | anthropic; CI and tests always use mock
-SAFEPAY_LLM_MODEL = env("SAFEPAY_LLM_MODEL", "claude-sonnet-5-5")  # used only when SAFEPAY_LLM=anthropic
+SAFEPAY_LLM_MODEL = env("SAFEPAY_LLM_MODEL", "claude-opus-5-5")  # used only when SAFEPAY_LLM=anthropic
 SAFEPAY_MODE = env("SAFEPAY_MODE", "demo")  # demo | prod (selects t2_cooloff_seconds)
 SAFEPAY_INTEL_URL = env("SAFEPAY_INTEL_URL", "http://127.0.0.1:8001")
 SAFEPAY_BANK_URL = env("SAFEPAY_BANK_URL", "http://127.0.0.1:8002")

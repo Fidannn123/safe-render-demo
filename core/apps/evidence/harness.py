@@ -53,7 +53,7 @@ from apps.intel_client import service as intel_service
 from apps.intel_client.oprf import OprfClient
 from apps.keystore.file_store import default_keystore
 from apps.ledger.tenancy import tenant_transaction
-from apps.payments.models import OutboxMessage, Payment
+from apps.payments.models import OutboxMessage, Payment, TenantLimits
 
 from .clock import SimClock, sim_clock, wall_clock
 from .seeding import DayMap, SeedResult, seed_twin
@@ -213,6 +213,10 @@ class Harness:
         except ValueError:
             data = None
         return response.status_code, data
+
+    def tenant_frozen(self, t: TenantRun) -> bool:
+        with tenant_transaction(t.tenant_id):
+            return bool(TenantLimits.objects.filter(tenant_id=t.tenant_id, frozen=True).exists())
 
     def login(self, t: TenantRun, role: str) -> Client:
         assert t.seed is not None
@@ -451,13 +455,24 @@ class Harness:
             "create_vendor": self.api("POST", "/vendors", {"name": "Attacker Ltd"}, headers=self.agent(t))[0],
         }
         expected = s["expected"][config]
-        observed = {"http_status": status, "problem_code": (body or {}).get("code"), "config_endpoints": probes}
+        frozen = self.tenant_frozen(t)
+        observed = {
+            "http_status": status,
+            "problem_code": (body or {}).get("code"),
+            "config_endpoints": probes,
+            "auto_freeze": frozen,
+        }
         passed = (
             status == expected["http_status"]
             and observed["problem_code"] == expected["problem_code"]
             and all(code in (401, 403) for code in probes.values())
+            and frozen == bool(expected.get("auto_freeze", False))
         )
         self.record(s, config, t.tenant_id, observed=observed, refs={"payment_id": target}, passed=passed)
+        if frozen:  # the owner investigates and lifts the velocity freeze; the stolen token stays revoked
+            owner = self.login(t, "owner")
+            self.api("POST", f"/tenants/{t.tenant_id}/unfreeze", {"reason": "token rotated"}, client=owner)
+            t.token = ""
 
     def self_approval(self, s: dict[str, Any], config: str, t: TenantRun) -> None:
         """The owner who issued the agent's token tries to approve the agent's held proposal."""
@@ -876,6 +891,11 @@ class Harness:
             "note": "Reports reveal the reported payee by design; blind OPRF queries must reveal none.",
             "synthetic": True,
         }
+        # Inputs for the operator-side attack that intel runs next (manage.py privacy_attack).
+        self.write_jsonl(self.out / "privacy-transcript.jsonl", [{"request": line} for line in self.intel_traffic])
+        (self.out / "privacy-candidates.json").write_text(
+            json.dumps([{"country": i[:2], "iban": i} for i in sorted(ibans)], indent=2) + "\n", encoding="utf-8"
+        )
         (self.out / "privacy.json").write_text(
             json.dumps(privacy, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )

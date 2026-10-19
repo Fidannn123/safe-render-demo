@@ -142,6 +142,13 @@ def verify_bundle(run_dir: Path, labels_path: Path) -> dict[str, Any]:
     recomputed = metrics_module.dumps(metrics_module.compute(records, labels, run, privacy))
     if (run_dir / "metrics.json").read_text(encoding="utf-8") != recomputed:
         raise EvidenceError("metrics.json differs from a recomputation over ops.jsonl")
+    attack = privacy.get("operator_attack")
+    if attack is not None and not (
+        attack["passed"]
+        and attack["recovered_identifiers"] == 0
+        and attack["control_recovered_identifiers"] == attack["true_payees"]
+    ):
+        raise EvidenceError("the operator privacy attack recovered identifiers or its control failed")
     return {
         "verified": True,
         "ops_records": len(records),

@@ -236,13 +236,7 @@ class Demo:
             self.show_decision(status, decision)
             held.append(invoice["payment_id"])
 
-        self.step("Hijacked agent: uses its token to approve its own held payment")
-        status, body = agent.call(
-            "POST", f"/payments/{held[0]}/approve", {"reason": "agent", "acknowledged_warnings": []}
-        )
-        self.say(f"HTTP {status} {code(body)} (agent tokens cannot reach human-only endpoints)")
-        status, body = agent.call("POST", f"/tenants/{retail['tenant_id']}/unfreeze", {"reason": "agent"})
-        self.say(f"unfreeze with the agent token: HTTP {status} {body.get('code') if body else ''}")
+        agent = self.hijack_step(agent, owner, retail, held[0])
 
         self.step("The owner who delegated to the agent tries to approve the agent's payment")
         status, body = owner.call(
@@ -316,6 +310,31 @@ class Demo:
         approver = self.user(twin, "approver")["username"]
         print(f"payment {invoice['payment_id']} waits in the approvals queue; sign in as {approver}")
         return 0 if status == 201 and decision.get("verdict") == "HOLD" else 1
+
+    def hijack_step(self, agent: Api, owner: Api, retail: dict[str, Any], held_id: str) -> Api:
+        """A hijacked agent probes human-only endpoints; the third refusal freezes the tenant (D-046)."""
+        self.step("Hijacked agent: uses its token to approve its own held payment")
+        status, body = agent.call(
+            "POST", f"/payments/{held_id}/approve", {"reason": "agent", "acknowledged_warnings": []}
+        )
+        self.say(f"HTTP {status} {code(body)} (agent tokens cannot reach human-only endpoints)")
+        status, body = agent.call("POST", f"/tenants/{retail['tenant_id']}/unfreeze", {"reason": "agent"})
+        self.say(f"unfreeze with the agent token: HTTP {status} {body.get('code') if body else ''}")
+        status, body = agent.call("POST", "/vendors", {"name": "Attacker Holdings Ltd"})
+        self.say(f"add a vendor with the agent token: HTTP {status} {code(body)}")
+        _, tenant = owner.call("GET", f"/tenants/{retail['tenant_id']}/status")
+        by = (tenant or {}).get("frozen_by") or {}
+        frozen = tenant.get("frozen") if tenant else None
+        self.say(
+            f"third refusal within 10 min: automatic T4 freeze, frozen={frozen} "
+            f"by {by.get('id', '?')}; every agent token revoked"
+        )
+        owner.call("POST", "/auth/step-up", {"otp": otp(self.user("retail", "owner"), self.used_codes)})
+        status, body = owner.call(
+            "POST", f"/tenants/{retail['tenant_id']}/unfreeze", {"reason": "token rotated"}
+        )
+        self.say(f"the owner rotates the token and unfreezes (step-up): HTTP {status}")
+        return self.agent(owner, "payables-agent-2")
 
     def network_step(self) -> None:
         scenario = self.scenario("pharmacy-reported-2plus-01")

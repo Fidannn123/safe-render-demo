@@ -6,7 +6,7 @@ against them by the harness):
   * rolling sums count earlier scenario payments of the same twin whose verdict was ALLOW or GUARDED
     (reserved immediately); the window is (t - 24 h, t] and includes the current amount.
   * SPLIT_PATTERN: payments to the same payee in the window, including the current one, number >= 3
-    and sum > per_tx_cap.
+    and sum > per_tx_cap; for a new/changed payee number >= 2 and sum > new_payee_cap (D-045).
   * DUPLICATE_SUSPECT: an earlier invoice of the same vendor issued <= 30 days before with normalised
     reference (upper-case alphanumerics) at Damerau-Levenshtein distance <= 2.
   * DUPLICATE_PAID: same vendor, normalised reference, amount and currency as a settled payment.
@@ -58,6 +58,7 @@ class Policy:
     dup_window_days: int
     dup_distance: int
     split_min_count: int
+    split_new_payee_min_count: int
     z_threshold: Fraction
     z_min_history: int
 
@@ -87,6 +88,7 @@ def load_policy(path: Path | None = None) -> Policy:
         dup_window_days=int(det["duplicate_suspect"]["window_days"]),
         dup_distance=int(det["duplicate_suspect"]["reference_max_edit_distance"]),
         split_min_count=int(det["split_pattern"]["min_count"]),
+        split_new_payee_min_count=int(det["split_pattern"]["new_payee"]["min_count"]),
         z_threshold=Fraction(Decimal(det["amount_anomaly"]["robust_z_threshold"])),
         z_min_history=int(det["amount_anomaly"]["min_history"]),
     )
@@ -235,10 +237,12 @@ def evaluate(  # noqa: PLR0912, PLR0915, PLR0917
         ):
             codes.append("DUPLICATE_SUSPECT")
         same = [e for e in window if e.vendor_id == vendor.vendor_id]
-        if (
-            len(same) + 1 >= policy.split_min_count
-            and sum(e.amount_minor for e in same) + amount > policy.per_tx_cap
-        ):
+        split_count, split_cap = (
+            (policy.split_new_payee_min_count, policy.new_payee_cap)
+            if is_new
+            else (policy.split_min_count, policy.per_tx_cap)
+        )
+        if len(same) + 1 >= split_count and sum(e.amount_minor for e in same) + amount > split_cap:
             codes.append("SPLIT_PATTERN")
         history = [p.amount_minor for p in twin.paid_ap(vendor.vendor_id)]
         if len(history) >= policy.z_min_history and robust_z_exceeds(history, amount, policy.z_threshold):

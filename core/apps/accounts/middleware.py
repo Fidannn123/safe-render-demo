@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 
 from django.db import transaction
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.middleware.csrf import CsrfViewMiddleware
 
+from apps.approvals.velocity import record_refusal
 from apps.ledger.tenancy import bind_tenant
 from apps.payments.errors import ProblemError
 from apps.payments.types import Actor
@@ -58,11 +60,30 @@ class TenantMiddleware:
                 # Ninja exception handlers return responses: roll back any writes before a typed error.
                 if response.status_code >= 400:
                     transaction.set_rollback(True)
-                return response
+            if principal is not None and principal.actor.type == "agent":
+                refusal = _agent_refusal(request, response)
+                if refusal:  # recorded after the rollback, in its own transaction (D-046)
+                    record_refusal(principal.tenant_id, principal.actor.id, refusal)
+            return response
         except ProblemError as error:
             return JsonResponse(
                 error.as_problem(), status=error.status, content_type="application/problem+json"
             )
+
+
+def _agent_refusal(request: HttpRequest, response: HttpResponse) -> str | None:
+    """A request an honest agent should never make: a human-only endpoint, or a DENIED proposal."""
+    if response.status_code == 403:
+        return f"{request.method} {request.path}: FORBIDDEN_SCOPE"
+    if response.status_code == 201 and request.path.rstrip("/").endswith("/agent/proposals"):
+        try:
+            decision = json.loads(response.content)
+        except ValueError:
+            return None
+        if isinstance(decision, dict) and decision.get("verdict") == "DENY":
+            codes = ",".join(str(r.get("code")) for r in decision.get("reasons", []) if isinstance(r, dict))
+            return f"proposal DENIED: {codes}"[:200]
+    return None
 
 
 def _csrf_target(request: HttpRequest) -> HttpResponse:

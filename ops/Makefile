@@ -23,7 +23,7 @@ PY_PROJECTS := core intel bank_sandbox
 
 .PHONY: spec-guard help up down down-volumes logs ps keys migrate seed db-up \
         verify lint typecheck test test-spec test-python test-console \
-        demo hold evidence verify-evidence verify-audit tech-doc clean-clone fetch-vectors \
+        demo hold evidence evidence-llm verify-evidence verify-audit tech-doc clean-clone fetch-vectors \
         native-init native-up native-down native-status native-reset
 
 help: ## List targets
@@ -102,6 +102,9 @@ hold: ## Leave one HELD payment in a twin's approvals queue for the console (TWI
 
 evidence: ## Full B0/B1/B2 run into evidence/run-$(SEED)/ (fresh database; bank + intel must be up)
 	$(HARNESS) evidence --seed $(SEED)
+
+evidence-llm: ## Real-LLM extractor measurement into evidence/llm-<provider>-$(SEED)/ (needs ANTHROPIC_API_KEY; PROVIDER=mock for the baseline)
+	$(HARNESS) evidence-llm --seed $(SEED) --provider $(or $(PROVIDER),anthropic)
 
 verify-evidence: ## Re-verify signatures and recompute metrics of evidence/run-$(SEED)/ (offline)
 	$(HARNESS) verify-evidence --seed $(SEED)

@@ -19,6 +19,7 @@ dependencies = [
   "voprf==0.2.0",
   "jsonschema>=4.26,<5",
   "referencing>=0.36",
+  "anthropic>=1,<2",
 ]
 
 [tool.uv]

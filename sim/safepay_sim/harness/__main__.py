@@ -8,6 +8,7 @@
   python -m safepay_sim.harness verify-evidence [--seed 42]   offline re-verification of the bundle
   python -m safepay_sim.harness readme          [--seed 42]   regenerate README.md's results table
   python -m safepay_sim.harness verify-audit                  recompute every live tenant's audit chain
+  python -m safepay_sim.harness evidence-llm    [--provider]  extractor accuracy + injection check (real LLM)
 
 Set SAFEPAY_RUNNER=native to run against a local stack (ops/scripts/native_stack.py) instead of docker.
 """
@@ -28,6 +29,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.twofactor.totp import TOTP
 
 from safepay_sim.twins.__main__ import main as twins_main
+from safepay_sim.twins.generate import build as build_twins
 
 from . import metrics as metrics_module
 from .plan import bank_accounts, make_plan
@@ -40,9 +42,17 @@ README = REPO / "README.md"
 
 
 def twins(seed: int) -> Path:
+    """evidence/twins-<seed>, regenerated whenever it differs from what this generator version builds."""
     out = REPO / "evidence" / f"twins-{seed}"
-    if not (out / "labels.json").exists() and twins_main(["--seed", str(seed), "--out", str(out)]) != 0:
-        raise SystemExit("twin generation failed")
+    files = build_twins(seed)
+    current = out.is_dir() and all(
+        (out / name).is_file() and (out / name).read_bytes() == data for name, data in files.items()
+    )
+    if not current:
+        if out.exists():
+            shutil.rmtree(out)
+        if twins_main(["--seed", str(seed), "--out", str(out)]) != 0:
+            raise SystemExit("twin generation failed")
     return out
 
 
@@ -189,7 +199,39 @@ def cmd_evidence(options: argparse.Namespace) -> int:
         },
     )
     print(output.strip().splitlines()[-1] if output.strip() else "run_evidence produced no output")
+    candidates = options.privacy_candidates
+    print(f"operator privacy attack: transcript + epoch keys + {candidates:,} candidate IBANs...")
+    runner.manage(
+        "intel", ["privacy_attack", "--run-dir", runner.path(run_dir), "--candidates", str(candidates)]
+    )
+    attack = json.loads((run_dir / "privacy-attack.json").read_text(encoding="utf-8"))
+    privacy_file = run_dir / "privacy.json"
+    privacy = json.loads(privacy_file.read_text(encoding="utf-8"))
+    privacy["operator_attack"] = {
+        **{k: attack["attack"][k] for k in ("candidates_checked", "queries", "blinded_elements")},
+        "repeated_blinded_elements": attack["attack"]["repeated_blinded_elements"],
+        "recovered_identifiers": attack["attack"]["recovered_identifiers"],
+        "control_recovered_identifiers": attack["control_naive_sha256_lookup"]["recovered_identifiers"],
+        "true_payees": attack["true_payees"],
+        "passed": attack["passed"],
+    }
+    privacy_file.write_text(json.dumps(privacy, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return finalise(run_dir)
+
+
+def cmd_evidence_llm(options: argparse.Namespace) -> int:
+    """Extractor accuracy and injection check on every twin invoice (mock, or the real LLM)."""
+    runner = Runner.detect()
+    out = REPO / "evidence" / f"llm-{options.provider}-{options.seed}"
+    out.mkdir(parents=True, exist_ok=True)
+    args = ["measure_llm", "--twins-dir", runner.path(twins(options.seed)), "--out", runner.path(out)]
+    args += ["--provider", options.provider]
+    if options.limit:
+        args += ["--limit", str(options.limit)]
+    output = runner.manage("core", args, extra_env={"SAFEPAY_LLM": options.provider})
+    print(output.strip().splitlines()[-1] if output.strip() else "measure_llm produced no output")
+    print(f"report: {out / 'LLM.md'}")
+    return 0
 
 
 def finalise(run_dir: Path) -> int:
@@ -288,7 +330,14 @@ def main(argv: list[str] | None = None) -> int:
     hold.add_argument("--core", default="http://127.0.0.1:8000")
     for name in ("evidence", "verify-evidence", "readme"):
         sub.add_parser(name).add_argument("--seed", type=int, default=42)
+    sub.choices["evidence"].add_argument(
+        "--privacy-candidates", type=int, default=1_000_000, help="candidate IBANs for the privacy attack"
+    )
     sub.add_parser("verify-audit")
+    llm = sub.add_parser("evidence-llm")
+    llm.add_argument("--seed", type=int, default=42)
+    llm.add_argument("--provider", choices=("mock", "anthropic"), default="anthropic")
+    llm.add_argument("--limit", type=int, default=0)
     options = parser.parse_args(argv)
     handlers = {
         "seed": cmd_seed,
@@ -299,6 +348,7 @@ def main(argv: list[str] | None = None) -> int:
         "verify-evidence": cmd_verify_evidence,
         "readme": cmd_readme,
         "verify-audit": cmd_verify_audit,
+        "evidence-llm": cmd_evidence_llm,
     }
     return handlers[options.command](options)
 

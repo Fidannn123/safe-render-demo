@@ -62,7 +62,7 @@
         { "code": "BANK_DETAIL_MISMATCH", "weight": 50, "detail": "Invoice IBAN differs from registry account." },
         { "code": "INJECTION_MARKERS", "weight": 30, "detail": "Instruction-like text in untrusted field memo." }
       ],
-      "policy_version": "2026.10.19-1",
+      "policy_version": "2026.10.19-2",
       "network_epoch": null,
       "inputs_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
       "nonce": "00112233445566778899aabbccddeeff",

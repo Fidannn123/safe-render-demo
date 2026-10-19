@@ -432,3 +432,24 @@ def test_other_seeds_build_and_validate(seed: int) -> None:
     assert not list(Draft202012Validator(schema).iter_errors(lab))
     assert lab["seed"] == seed
     assert {s["scenario_class"] for s in lab["scenarios"] if s["label"] == "attack"} == ATTACK_CLASSES
+
+
+@pytest.mark.parametrize("seed", [1, 50, 90, 113, 148, 183, 198, 250])
+def test_other_seeds_generate(seed: int) -> None:
+    """Seeds 50 and 90 once failed the stressed forecast calibration, 113-198 the near-duplicate design."""
+    lab = json.loads(build(seed)["labels.json"])
+    assert lab["seed"] == seed
+
+
+def test_new_payee_split_and_single_report_are_held() -> None:
+    """D-045: the second part of a new-payee split and a payee with one network report are HOLD."""
+    lab = labels(42)
+    parts = {s["part"]: s for s in lab["scenarios"] if s["kind"] == "split_new"}
+    assert parts[1]["expected"]["B1"]["verdict"] == "GUARDED"
+    for part in (2, 3):
+        for config in ("B1", "B2"):
+            assert parts[part]["expected"][config]["verdict"] == "HOLD"
+            assert "SPLIT_PATTERN" in parts[part]["expected"][config]["reason_codes"]
+    single = [s for s in lab["scenarios"] if s["kind"] == "reported_1"]
+    assert single
+    assert all(s["expected"]["B2"]["verdict"] == "HOLD" for s in single)
