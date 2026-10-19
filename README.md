@@ -100,13 +100,15 @@ make help            # all targets
 
 - Verified on Windows with the native runner: `make verify`, `make seed`, `make demo`, `make evidence`,
   `make verify-evidence`, `make verify-audit`, and the console in a browser.
-- The Docker path (`make up`, the harness with `SAFEPAY_RUNNER=docker`, `make clean-clone`) is configured
-  but has not been run on a machine with Docker yet. CI runs it on every push: `make verify`, then
-  `make up`, seed, demo, evidence and both verifiers, and uploads the evidence bundle.
+- Verified on Linux with Docker: `make up`, `make seed`, `make demo`, `make evidence`, both verifiers,
+  `make verify`, `make clean-clone`, and approving a held payment in the console on :8080. CI runs
+  `make verify`, then `make up`, seed, demo, evidence and both verifiers, and uploads the evidence bundle.
 - `make clean-clone` copies the project to a temporary directory and runs the quickstart there on its own
   compose project (stop the main stack first). When this folder is not its own git repository it copies
   the files git would not ignore instead of cloning.
-- Not built yet: `docs/SECURITY.md`, the deck and the demo video (Phase 4 deliverables).
+- Security self-assessment: [docs/SECURITY.md](docs/SECURITY.md) (tiers and the tests that prove them,
+  threat model, known risks, OWASP LLM Top 10 mapping).
+- Not built yet: the demo video (outline and script in `docs/`).
 - Harness scope and simplifications are listed in `docs/DECISIONS.md` (D-035 onwards) and in each
   bundle's `EVIDENCE.md`.
 

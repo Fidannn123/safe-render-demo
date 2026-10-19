@@ -310,7 +310,20 @@ Found by reading the compose setup, since Docker is not available on the machine
 - native_stack: `pg_ctl start` gets null std handles. On Windows pg_ctl keeps a cmd.exe wrapper alive
   for the server's lifetime, and an inherited pipe made `make native-reset | tail` hang.
 
+### D-044 First Docker run (Linux) and the security self-assessment
+- The whole Docker path ran for the first time: `make up`, seed, demo, evidence, verify-evidence,
+  verify-audit, verify and `make clean-clone` pass, and a held payment was approved in the console on :8080.
+- Defect fixed: when the host user is root, the harness ran non-live commands as image user 10001,
+  which cannot write a root-owned checkout, so `make evidence` failed. Non-live commands now always run
+  as the host uid and gid, root included.
+- CI: gitleaks flagged `sign_key: Ed25519PrivateKey` type annotations as generic API keys. `.gitleaks.toml`
+  allowlists that annotation pattern only.
+- M6 had no tests. `core/apps/agent/tests/test_injection.py` covers its gate: an injection corpus never
+  reaches a planner tool argument, raw text stays tagged `untrusted`, extra model fields are rejected.
+- `docs/SECURITY.md` (deliverable 05) lists where the prototype is weaker than architecture.md: one PII
+  key per deployment instead of per-tenant DEKs under a KEK, no velocity freeze, and the large-candidate
+  privacy test is not built.
+
 ## Open questions for the human
-None blocking. Human-only items: `ANTHROPIC_API_KEY` in local `.env`, a GitHub remote for CI,
-eligibility/registration with the organizer, a first CI run (or `make clean-clone`) on a machine with
-Docker, `docs/SECURITY.md`, the deck and the demo video.
+None blocking. Human-only items: `ANTHROPIC_API_KEY` in local `.env`, eligibility/registration with the
+organizer, recording the demo video.
