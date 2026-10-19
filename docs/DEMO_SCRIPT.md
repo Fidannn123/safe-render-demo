@@ -13,7 +13,7 @@ make hold TWIN=logistics                        # one held payment in the consol
 cd sim && uv run python -m safepay_sim.harness otp logistics.approver --password   # console login, beat 6
 ```
 
-Open three windows: a terminal (large font), the console at http://127.0.0.1:8080, and
+Open three windows: a terminal (large font), the console at http://127.0.0.1:8080/console, and
 `evidence/run-42/EVIDENCE.md` in a Markdown viewer. To rehearse, run `make demo` and approve the held
 payment once, then repeat the block above so the recorded run starts clean (`make down-volumes` also
 removes the old demo users).

@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { dateTime, errorText, money, request, type Payment, type Session, type Vendor } from "./api";
-import { EmptyState, Notice } from "./components";
+import { EmptyState, Icon, Notice } from "./components";
 
-export function ApprovalTable({ payments, vendors, active, onSelect, connected }: { payments: Payment[]; vendors: Vendor[]; active: string | null; onSelect: (payment: Payment) => void; connected: boolean }) {
+export function ApprovalTable({ payments, total, vendors, active, onSelect, connected }: { payments: Payment[]; total: number; vendors: Vendor[]; active: string | null; onSelect: (payment: Payment) => void; connected: boolean }) {
   const names = new Map(vendors.map((vendor) => [vendor.vendor_id, vendor.name]));
-  return <section className="panel queue-panel"><table><thead><tr><th>Payment</th><th>Risk</th><th className="amount">Amount</th></tr></thead><tbody>
+  return <section className="panel queue-panel"><div className="panel-head"><span className="panel-head-ico"><Icon name="queue" /></span><div><h2>Held payments</h2><p>{payments.length} / {total}</p></div></div><table><thead><tr><th>Payment</th><th>Risk</th><th className="amount">Amount</th></tr></thead><tbody>
     {payments.map((payment) => <tr key={payment.payment_id} className={active === payment.payment_id ? "selected" : ""}><td><button className="row-button" onClick={() => onSelect(payment)}><strong>{names.get(payment.vendor_id ?? "") ?? "Registry vendor"}</strong><span>{payment.reference ?? payment.payment_id.slice(0, 8)} · Due {payment.due_date ?? "—"}</span></button></td><td><span className="risk">{payment.tier ?? "—"} · {payment.state}</span></td><td className="amount"><strong>{money(payment.amount_minor, payment.currency ?? "USD")}</strong></td></tr>)}
-  </tbody></table>{payments.length === 0 ? <EmptyState title={connected ? "All caught up" : "Connect your workspace"}>{connected ? "No held payments require review." : "Sign in to load authenticated payments."}</EmptyState> : null}</section>;
+  </tbody></table>{payments.length === 0 ? total > 0 ? <EmptyState title="No payments match" icon="search">Change the filter or the search to see the rest of the queue.</EmptyState> : <EmptyState title={connected ? "All caught up" : "Connect your workspace"}>{connected ? "No held payments require review." : "Sign in to load authenticated payments."}</EmptyState> : null}</section>;
 }
 
 export function ApprovalReview({ payment, session, onChanged, onExplain }: { payment: Payment; session: Session; onChanged: () => void; onExplain: () => void }) {

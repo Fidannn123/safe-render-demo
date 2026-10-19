@@ -282,9 +282,9 @@ class Demo:
 
         STATE.parent.mkdir(parents=True, exist_ok=True)
         STATE.write_text(json.dumps(self.state, indent=2), encoding="utf-8")
-        print("\nDone. Open the console (http://127.0.0.1:8080 with Docker, :5173 natively) to inspect")
+        print("\nDone. Open the console (http://127.0.0.1:8080/console, or :5173/console natively) to")
         print(
-            "decisions, the approvals queue and evidence metrics. "
+            "inspect decisions, the approvals queue and evidence metrics. "
             "One-time codes: python -m safepay_sim.harness otp <user>"
         )
         return 0

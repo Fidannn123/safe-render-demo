@@ -243,7 +243,7 @@ def cmd_start(_: argparse.Namespace) -> None:
         )
     PIDS.write_text(json.dumps(pids), encoding="utf-8")
     cmd_status(_)
-    print("console: http://127.0.0.1:5173  (logs in", LOGS, ")")
+    print("console: http://127.0.0.1:5173/console  (landing page at /, logs in", LOGS, ")")
 
 
 def stop_pid(pid: int) -> None:

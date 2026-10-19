@@ -1,0 +1,1884 @@
+/* ============================================================
+   Landing page (marketing site at /). Self-contained.
+
+   Everything is scoped under `.lp` and carries its own tokens,
+   deliberately NOT reading the console palette in index.css —
+   the signed-in app and this page are different products and
+   should be free to move independently.
+
+   Geometry here is measured, not guessed: 1200px shell, 40px
+   section gutter, 88/110 display at -0.04em, 56/67.2 section,
+   36/45 card, 32/46.4 bento, 18/27 body, 14/21 label. Radii run
+   8 / 12 / 16 / 20 / 24 / 36 / pill.
+
+   The page ground is WHITE. Only two bands are tinted: the hero
+   and the closing CTA + footer. Getting that wrong flattens the
+   whole page, which is why it is stated here.
+   ============================================================ */
+
+.lp {
+  /* ground */
+  --pg: #ebeff5;
+  --pg-deep: #e3e8f1;
+  --card: #ffffff;
+
+  /* ink */
+  --ink: #242426;
+  --ink-75: rgba(36, 36, 38, 0.75);
+  --ink-50: rgba(36, 36, 38, 0.5);
+  --ink-25: rgba(36, 36, 38, 0.25);
+  --ink-12: rgba(36, 36, 38, 0.12);
+  --ink-07: rgba(36, 36, 38, 0.07);
+
+  /* dark ground */
+  --dark: #35363b;
+  --dark-2: #4d4f57;
+  --on-dark: #ffffff;
+  --on-dark-75: rgba(255, 255, 255, 0.75);
+  --on-dark-50: rgba(255, 255, 255, 0.5);
+  --on-dark-12: rgba(255, 255, 255, 0.12);
+
+  /* accent */
+  --lime: #d9ff5c;
+  --lime-deep: #c7f03f;
+  --clay: #e0c5b6;
+  --mist: #c9d3e0;
+
+  /* status tag: set by the modifier, read by .lp-tag */
+  --tag-bg: var(--ink-07);
+  --tag-ink: var(--ink-75);
+
+  /* radii */
+  --r-xs: 8px;
+  --r-sm: 12px;
+  --r-md: 16px;
+  --r-lg: 20px;
+  --r-xl: 24px;
+  --r-2xl: 36px;
+  --pill: 999px;
+
+  /* metrics */
+  --head-gap: 20px;
+  --head-pad: 64px;
+  --shell: 1200px;
+  --edge: 40px;
+  --nav-h: 72px;
+
+  background: var(--card);
+  color: var(--ink);
+  font-family: 'Inter Tight', 'Manrope', system-ui, -apple-system, sans-serif;
+  --font-logo: 'Syne', 'Inter Tight', system-ui, sans-serif;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+}
+
+.lp *,
+.lp *::before,
+.lp *::after { box-sizing: border-box; }
+
+/* index.css styles bare h1–h5 at (0,0,1): it sets the console's
+   Cal Sans display face AND a colour, both of which out-specify
+   anything inherited from `.lp`. Headings here would silently
+   render in the wrong typeface on a wrong ground. Reset once, at
+   (0,1,1), rather than at every call site (N6b). */
+.lp h1, .lp h2, .lp h3, .lp h4, .lp h5, .lp h6 {
+  margin: 0;
+  font-family: inherit;
+  font-weight: 400;
+  color: inherit;
+}
+.lp p { margin: 0; }
+.lp ul, .lp ol { margin: 0; padding: 0; list-style: none; }
+.lp button { font: inherit; border: 0; background: none; cursor: pointer; color: inherit; }
+.lp img { display: block; max-width: 100%; }
+
+/* Lucide ships stroke-width as a presentation attribute, which any
+   CSS declaration outranks. The reference's icon set is drawn at
+   1.5 on a 24 grid; matching it here is what keeps the icons from
+   reading heavier than the type around them. Scoped to `.lucide`
+   so the hand-drawn chart and mock SVGs keep their own weights. */
+.lp svg.lucide {
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+/* ---------- shell ---------- */
+
+.lp-shell {
+  width: 100%;
+  max-width: calc(var(--shell) + var(--edge) * 2);
+  margin-inline: auto;
+  padding-inline: var(--edge);
+}
+
+.lp-sec { position: relative; }
+.lp-sec--pad { padding-block: 120px; }
+.lp-sec--tight { padding-block: 88px; }
+
+/* ---------- type scale ---------- */
+
+.lp-d1 { text-wrap: balance; font-size: clamp(42px, 6.1vw, 88px); line-height: 1.07; letter-spacing: -0.04em; }
+.lp-d2 { text-wrap: balance; font-size: clamp(34px, 4.4vw, 64px); line-height: 1.25; letter-spacing: -0.04em; }
+.lp-d3 { text-wrap: balance; font-size: clamp(31px, 3.9vw, 56px); line-height: 1.2;  letter-spacing: -0.04em; }
+.lp-d4 { font-size: clamp(25px, 2.5vw, 36px); line-height: 1.25; letter-spacing: -0.03em; }
+.lp-d5 { font-size: clamp(23px, 2.2vw, 32px); line-height: 1.45; letter-spacing: -0.03em; }
+
+.lp-lead {
+  font-size: 18px;
+  line-height: 1.5;
+  color: var(--ink-75);
+}
+.lp-lead--dark { color: var(--on-dark-75); }
+
+.lp-small { font-size: 14px; line-height: 1.5; color: var(--ink-75); }
+
+/* ---------- eyebrow pill ---------- */
+
+.lp-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 14px 0 12px;
+  border-radius: var(--pill);
+  background: var(--card);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1;
+  white-space: nowrap;
+  /* a flex column parent with the default `align-items: stretch`
+     overrides inline-flex's shrink-to-fit; this keeps the pill the
+     width of its label wherever it is dropped. */
+  width: fit-content;
+  max-width: 100%;
+  flex: 0 0 auto;
+}
+/* A 12px glyph inside a grey disc is the stock "AI landing page"
+   badge. The reference sets the icon bare at 16 on the 24 grid,
+   the same weight as the label beside it. */
+.lp-eyebrow__ico {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--ink-50);
+}
+.lp-eyebrow__ico svg { width: 16px; height: 16px; }
+.lp-eyebrow--flat { background: var(--pg); }
+.lp-eyebrow--dark { background: var(--dark-2); color: var(--on-dark); }
+.lp-eyebrow--dark .lp-eyebrow__ico { color: var(--on-dark-50); }
+
+/* ---------- buttons ----------
+   The signature control, rebuilt from the reference's measured
+   hover: a lime chip pinned inside the pill carries BOTH the arrow
+   and a second copy of the label, right-aligned and clipped. On
+   hover the chip widens to fill the pill, sweeping that copy into
+   view from the left while the outer label fades out under it.
+
+   Measured on the reference's 64px CTA: pill 195x64 r20, inset 4,
+   chip 56x56 r16 growing to 187, chip gap 16, chip content
+   right-aligned so the label lands 20px inside the chip's left
+   edge. `--bp` inset, `--bc` chip, `--bg` gap are the only knobs;
+   every size variant just retunes them.
+   ============================================================ */
+
+.lp-btn {
+  --bp: 4px;
+  --bc: 40px;
+  --bg: 16px;
+  --br: var(--r-md);
+  --bcr: var(--r-sm);
+  --b-bg: var(--dark);
+  --b-ink: var(--on-dark);
+  --b-chip: var(--lime);
+  --b-chip-ink: #242426;
+
+  position: relative;
+  display: inline-grid;
+  grid-auto-flow: column;
+  align-items: center;
+  gap: var(--bg);
+  height: 48px;
+  padding: var(--bp) 22px var(--bp) var(--bp);
+  border-radius: var(--br);
+  background: var(--b-bg);
+  color: var(--b-ink);
+  font-size: 15px;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: clip;
+  isolation: isolate;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+/* reserves the chip's footprint in the grid; the chip itself is
+   absolute so its growth cannot resize the pill */
+.lp-btn__ghost {
+  width: var(--bc);
+  height: var(--bc);
+}
+
+.lp-btn__chip {
+  position: absolute;
+  left: var(--bp);
+  top: var(--bp);
+  bottom: var(--bp);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--bg);
+  width: var(--bc);
+  border-radius: var(--bcr);
+  background: var(--b-chip);
+  color: var(--b-chip-ink);
+  overflow: hidden;
+  transition: width 0.62s cubic-bezier(0.16, 1, 0.3, 1),
+              border-radius 0.4s ease;
+}
+.lp-btn__chip > span {
+  flex: 0 0 auto;
+  padding-inline: 4px;
+}
+.lp-btn__ico {
+  display: grid;
+  place-items: center;
+  flex: 0 0 var(--bc);
+  width: var(--bc);
+  height: var(--bc);
+}
+.lp-btn__ico svg {
+  width: 40%;
+  height: 40%;
+  stroke-width: 1.5;
+}
+
+.lp-btn__label {
+  position: relative;
+  z-index: 0;
+  transition: opacity 0.34s ease, transform 0.62s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lp-btn:hover .lp-btn__chip,
+.lp-btn:focus-visible .lp-btn__chip { width: calc(100% - var(--bp) * 2); }
+.lp-btn:hover .lp-btn__label,
+.lp-btn:focus-visible .lp-btn__label { opacity: 0; transform: translateX(28px); }
+.lp-btn:active { transform: scale(0.985); }
+
+.lp-btn--lg {
+  --bc: 56px;
+  --br: var(--r-lg);
+  --bcr: var(--r-md);
+  height: 64px;
+  padding-right: 26px;
+  font-size: 17px;
+}
+
+.lp-btn--sm {
+  --bp: 2px;
+  --bc: 32px;
+  --bg: 12px;
+  --br: var(--r-sm);
+  --bcr: 10px;
+  height: 36px;
+  padding-right: 16px;
+  font-size: 14px;
+}
+
+/* lime body, dark chip — used on dark grounds */
+.lp-btn--lime {
+  --b-bg: var(--lime);
+  --b-ink: #242426;
+  --b-chip: var(--dark);
+  --b-chip-ink: #ffffff;
+}
+
+/* quiet: the secondary slots in the pricing grid */
+.lp-btn--quiet {
+  --b-bg: var(--pg);
+  --b-ink: var(--ink-75);
+  --b-chip: var(--card);
+  --b-chip-ink: var(--ink);
+}
+.lp-btn--quiet:hover { --b-ink: var(--ink); }
+
+/* on a dark ground the quiet variant flips */
+.lp-btn--ghost {
+  --b-bg: var(--dark-2);
+  --b-ink: var(--on-dark);
+}
+
+/* full-width: the label centres over the reserved chip slot */
+.lp-btn--wide {
+  width: 100%;
+  grid-template-columns: var(--bc) 1fr;
+  padding-right: var(--bp);
+}
+.lp-btn--wide .lp-btn__label { text-align: center; padding-right: calc(var(--bc) + var(--bg) - var(--bp)); }
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-btn__chip, .lp-btn__label { transition-duration: 0.01ms; }
+}
+
+/* ---------- reveal ----------
+   Every variant starts hidden, so a missed trigger renders a blank
+   section rather than an unanimated one (N6). `is-in` is rendered by
+   the Rv component, never written onto the node by the observer: a
+   class React does not know about is wiped on the next render of the
+   parent, and the element fades back out for good. Rv opens
+   unconditionally when IntersectionObserver is absent. */
+
+.lp-rv {
+  opacity: 0;
+  transform: translateY(var(--rv-y, 24px));
+  transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: var(--rv-d, 0ms);
+}
+.lp-rv.is-in { opacity: 1; transform: none; }
+
+/* Hero content is opened on mount, not on intersection. The stage
+   sits below the fold on a short viewport, and an observer that
+   never fires would leave the hero visibly empty (N6). */
+.lp-rv--eager { transition-delay: var(--rv-d, 0ms); }
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-rv { transition-duration: 0.01ms; }
+}
+
+/* ============================================================
+   NAV — a 1200px pill that takes its colour from the band under it
+
+   Measured on the reference: 1200 wide inside the 120px gutters,
+   56 tall, r24. Transparent while the page is at the top, solid
+   white once it moves, and #35363B with 50%-white links while it
+   floats over a dark band. The tone comes from an
+   IntersectionObserver in Landing.jsx, not from a scroll offset —
+   a hard-coded pixel range would drift the moment a section's
+   height changes.
+   ============================================================ */
+
+.lp-navwrap {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 60;
+  padding: 0 var(--edge);
+  pointer-events: none;
+  transition: padding-top 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.lp-navwrap.is-stuck { padding-top: 8px; }
+
+.lp-nav {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  width: 100%;
+  max-width: var(--shell);
+  margin-inline: auto;
+  height: 56px;
+  padding: 8px 8px 8px 18px;
+  border-radius: var(--r-xl);
+  background: transparent;
+  pointer-events: auto;
+  transition: background 0.42s ease, box-shadow 0.42s ease, color 0.42s ease;
+}
+.lp-navwrap.is-stuck .lp-nav {
+  background: var(--card);
+  box-shadow: 0 1px 2px rgba(36, 36, 38, 0.05), 0 14px 34px rgba(36, 36, 38, 0.07);
+}
+/* over a dark band the pill inverts, at any scroll offset */
+.lp-navwrap.is-dark .lp-nav {
+  background: var(--dark);
+  box-shadow: none;
+}
+
+/* the wordmark carries the brand on its own — no lockup, no icon */
+.lp-nav__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-logo);
+  font-weight: 700;
+  font-size: 21px;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-decoration: none;
+  transition: color 0.42s ease;
+}
+.lp-navwrap.is-dark .lp-nav__brand { color: var(--on-dark); }
+
+.lp-nav__mark {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--dark);
+  color: var(--lime);
+  transition: background 0.42s ease, color 0.42s ease;
+}
+.lp-nav__mark svg { width: 17px; height: 17px; stroke-width: 1.5; }
+.lp-navwrap.is-dark .lp-nav__mark { background: var(--lime); color: #242426; }
+
+/* ---------- language ----------
+   Two flags rather than TR / EN: the reader recognises the shape
+   before they read anything, and it costs less width. They stay
+   rectangles — a pill crops the crescent and the cross into
+   unreadable mush at 22px. The inactive one is desaturated rather
+   than hidden, so both remain a target. */
+.lp-flags {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.lp-flags button {
+  display: block;
+  padding: 0;
+  border-radius: 3px;
+  line-height: 0;
+  cursor: pointer;
+  opacity: 0.34;
+  filter: saturate(0.08);
+  transition: opacity 0.22s ease, filter 0.22s ease;
+}
+.lp-flags button:hover { opacity: 0.8; filter: saturate(0.7); }
+/* colour alone marks the choice — a ring or a pill around a 24px
+   flag is more chrome than flag */
+.lp-flags button.on { opacity: 1; filter: none; }
+.lp-flags svg {
+  display: block;
+  width: 24px;
+  height: 16px;
+  border-radius: 2px;
+}
+
+.lp-nav__links {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-inline: auto;
+}
+.lp-nav__links a {
+  padding: 8px 14px;
+  border-radius: var(--pill);
+  font-size: 15px;
+  color: var(--ink-75);
+  text-decoration: none;
+  transition: color 0.42s ease, background 0.2s ease;
+}
+.lp-nav__links a:hover { color: var(--ink); background: var(--ink-07); }
+.lp-navwrap.is-dark .lp-nav__links a { color: var(--on-dark-50); }
+.lp-navwrap.is-dark .lp-nav__links a:hover { color: var(--on-dark); background: rgba(255, 255, 255, 0.1); }
+
+.lp-nav__right { display: flex; align-items: center; gap: 8px; }
+
+.lp-nav__login {
+  padding: 8px 12px;
+  border-radius: var(--pill);
+  font-size: 15px;
+  color: var(--ink-75);
+  text-decoration: none;
+  transition: color 0.42s ease;
+}
+.lp-nav__login:hover { color: var(--ink); }
+.lp-navwrap.is-dark .lp-nav__login { color: var(--on-dark-50); }
+.lp-navwrap.is-dark .lp-nav__login:hover { color: var(--on-dark); }
+
+.lp-burger {
+  display: none;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-sm);
+  background: var(--ink-07);
+  place-items: center;
+  color: var(--ink);
+}
+.lp-navwrap.is-dark .lp-burger { background: rgba(255, 255, 255, 0.12); color: var(--on-dark); }
+
+/* mobile drawer */
+.lp-drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  background: var(--pg);
+  padding: 16px var(--edge) 32px;
+  transform: translateY(-100%);
+  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.lp-drawer.is-open { transform: none; }
+.lp-drawer__top { display: flex; align-items: center; justify-content: space-between; height: 56px; }
+.lp-drawer__body { display: flex; flex-direction: column; gap: 4px; padding-top: 28px; }
+.lp-drawer__body a {
+  padding: 14px 4px;
+  border-bottom: 1px solid var(--ink-12);
+  font-size: 22px;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  text-decoration: none;
+}
+.lp-drawer__foot { display: flex; align-items: center; gap: 12px; padding-top: 24px; }
+
+/* ============================================================
+   HERO — tinted band, centred type, 3D stage that assembles
+   ============================================================ */
+
+.lp-hero {
+  position: relative;
+  background: var(--pg);
+  padding-top: 168px;
+  overflow: clip;
+}
+/* the band stops below the stage and hands back to white */
+.lp-hero::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 380px;
+  background: linear-gradient(to bottom, rgba(235, 239, 245, 0) 0%, var(--card) 88%);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.lp-hero__head {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--head-gap);
+  text-align: center;
+}
+.lp-hero__title { max-width: 19ch; }
+.lp-hero__lead { max-width: 46ch; }
+
+.lp-hero__cta {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding-top: 8px;
+}
+
+.lp-trust { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.lp-trust__row { display: flex; }
+/* white ring on the tinted band, not a tint on a tint: at 34px with
+   a 12px glyph these read as grey smudges rather than marks */
+.lp-trust__dot {
+  width: 38px;
+  height: 38px;
+  margin-left: -12px;
+  border-radius: var(--pill);
+  border: 2px solid var(--card);
+  display: grid;
+  place-items: center;
+  color: var(--ink-75);
+  background: var(--pg-deep);
+}
+.lp-trust__dot:first-child { margin-left: 0; }
+.lp-trust__dot svg { width: 17px; height: 17px; }
+.lp-trust__label { font-size: 14px; color: var(--ink-75); text-align: left; max-width: 34ch; }
+
+/* ---------- the 3D stage ----------
+   `--p` is scroll progress 0 → 1, written by JS as a CSS variable
+   so the scroll handler never triggers a React render. At p=0 the
+   stage is tipped back 10deg and the four cards are scattered; at
+   p=1 everything is identity and the dashboard reads flat. */
+
+
+.lp-stage {
+  --p: 0;
+  position: relative;
+  margin-top: 112px;
+  padding-bottom: 40px;
+  transform: perspective(1200px) rotateX(calc((1 - var(--p)) * -10deg));
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.lp-app {
+  position: relative;
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  width: 100%;
+  max-width: 1040px;
+  margin-inline: auto;
+  height: 640px;
+  border-radius: var(--r-xl);
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 0 2px 4px rgba(36, 36, 38, 0.04), 0 30px 80px rgba(36, 36, 38, 0.14);
+  overflow: visible;
+}
+
+.lp-app__rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 24px 0;
+  border-right: 1px solid var(--ink-07);
+}
+.lp-app__rail i {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-sm);
+  color: var(--ink-25);
+}
+.lp-app__rail i.on { background: var(--lime); color: #242426; }
+.lp-app__rail i svg { width: 17px; height: 17px; }
+.lp-app__rail .sp { flex: 1; }
+.lp-app__me {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--pill);
+  background: linear-gradient(140deg, var(--clay), var(--mist));
+}
+
+.lp-app__main { display: flex; flex-direction: column; min-width: 0; padding: 26px 24px 0; }
+.lp-app__bar { display: flex; align-items: center; gap: 16px; padding-bottom: 22px; }
+.lp-app__ttl { font-size: 30px; letter-spacing: -0.03em; line-height: 1.1; }
+.lp-app__sub { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-75); padding-top: 4px; }
+.lp-app__sub::before {
+  content: '';
+  width: 10px; height: 10px;
+  border-radius: var(--pill);
+  background: var(--ink-25);
+}
+.lp-app__pick {
+  display: flex; align-items: center; gap: 10px;
+  margin-left: auto;
+  height: 40px; padding: 0 14px;
+  border-radius: var(--pill);
+  background: var(--card);
+  border: 1px solid var(--ink-07);
+  font-size: 13px; color: var(--ink-75);
+  white-space: nowrap;
+}
+.lp-app__plus {
+  display: grid; place-items: center;
+  width: 40px; height: 40px;
+  border-radius: var(--pill);
+  background: var(--dark); color: var(--lime);
+}
+.lp-app__plus svg { width: 16px; height: 16px; }
+
+.lp-app__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* the four cards that fly in. Each carries its own start pose as
+   inline custom properties; the interpolation happens here. */
+.lp-hcard {
+  --tx: 0; --ty: 0; --rx: 0; --ry: 0; --rz: 0; --sc: 1;
+  transform:
+    perspective(1200px)
+    translate3d(calc(var(--tx) * (1 - var(--p)) * 1px), calc(var(--ty) * (1 - var(--p)) * 1px), 0)
+    rotateX(calc(var(--rx) * (1 - var(--p)) * 1deg))
+    rotateY(calc(var(--ry) * (1 - var(--p)) * 1deg))
+    rotateZ(calc(var(--rz) * (1 - var(--p)) * 1deg))
+    scale(calc(1 + (var(--sc) - 1) * (1 - var(--p))));
+  will-change: transform;
+  min-width: 0;
+}
+.lp-hcard--tall { grid-row: span 2; }
+.lp-hcard--wide { grid-column: span 2; }
+
+.lp-panel {
+  height: 100%;
+  padding: 18px;
+  border-radius: var(--r-sm);
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--ink-07);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.lp-panel__top { display: flex; align-items: flex-start; gap: 10px; }
+.lp-panel__k { font-size: 14px; color: var(--ink); }
+.lp-panel__d { font-size: 12px; color: var(--ink-75); padding-top: 2px; }
+.lp-panel__big {
+  font-size: 34px;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  padding-top: 6px;
+  white-space: nowrap;
+}
+.lp-panel__big small { font-size: 18px; color: var(--ink-75); margin-left: 3px; }
+.lp-panel__big span { font-size: 20px; color: var(--ink-75); margin-right: 2px; }
+.lp-panel__foot { margin-top: auto; display: flex; gap: 0; }
+.lp-panel__cell { flex: 1; padding-right: 10px; }
+.lp-panel__cell + .lp-panel__cell { border-left: 1px solid var(--ink-07); padding-left: 14px; }
+.lp-panel__cell b { display: block; font-size: 15px; font-weight: 400; letter-spacing: -0.02em; }
+.lp-panel__cell span { font-size: 12px; color: var(--ink-75); }
+
+.lp-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--pill);
+  background: var(--tag-bg);
+  color: var(--tag-ink);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.lp-tag--ok   { --tag-bg: rgba(88, 150, 60, 0.13);  --tag-ink: #4a7c33; }
+.lp-tag--warn { --tag-bg: rgba(186, 120, 40, 0.14); --tag-ink: #9a6420; }
+.lp-tag--stop { --tag-bg: rgba(190, 70, 60, 0.13);  --tag-ink: #a4433a; }
+.lp-tag--dark { --tag-bg: var(--dark); --tag-ink: #ffffff; }
+.lp-tag--lime { --tag-bg: var(--lime); --tag-ink: #242426; }
+
+/* the little line chart inside the tall card */
+.lp-spark { flex: 1; min-height: 0; margin-top: 14px; border-radius: var(--r-xs); background: var(--pg); position: relative; }
+.lp-spark svg { position: absolute; inset: 12px; width: calc(100% - 24px); height: calc(100% - 24px); }
+.lp-spark__x { position: absolute; inset: auto 12px 6px; display: flex; justify-content: space-between; font-size: 10px; color: var(--ink-25); }
+
+/* the day picker inside the small card */
+.lp-days { display: flex; gap: 4px; padding-top: 10px; }
+.lp-days i {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  gap: 1px;
+  padding: 6px 0;
+  border-radius: var(--r-xs);
+  font-size: 11px;
+  font-style: normal;
+  color: var(--ink-25);
+}
+.lp-days i b { font-size: 14px; font-weight: 400; color: var(--ink-75); }
+.lp-days i.on { background: var(--pg); }
+.lp-days i.on b { color: var(--ink); }
+
+/* the stacked-bar breakdown inside the wide card */
+.lp-bars { display: flex; gap: 3px; padding: 12px 0 10px; }
+.lp-bars i { height: 10px; border-radius: var(--pill); }
+.lp-brk { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.lp-brk__row { display: flex; align-items: center; gap: 10px; font-size: 13px; min-width: 0; }
+.lp-brk__row i { width: 8px; height: 8px; border-radius: var(--pill); flex: 0 0 auto; }
+.lp-brk__row span { min-width: 0; color: var(--ink-75); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-brk__row em { margin-left: auto; font-style: normal; color: var(--ink-75); flex: 0 0 auto; }
+.lp-brk__row b { font-weight: 400; flex: 0 0 auto; text-align: right; white-space: nowrap; }
+
+/* ============================================================
+   STRIP — sector panel under the hero
+   ============================================================ */
+
+.lp-strip { padding-block: 0 120px; }
+.lp-strip__bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 20px;
+}
+.lp-strip__bar p { font-size: 14px; color: var(--ink-75); }
+.lp-strip__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  font-size: 14px;
+  color: var(--ink-75);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.lp-strip__link i {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--pill);
+  background: var(--lime);
+  color: #242426;
+}
+.lp-strip__link i svg { width: 13px; height: 13px; }
+
+.lp-strip__panel {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  align-items: center;
+  gap: 16px;
+  min-height: 156px;
+  padding: 24px;
+  border-radius: var(--r-xl);
+  background: var(--pg);
+}
+.lp-strip__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink-25);
+  text-align: center;
+  min-width: 0;
+}
+.lp-strip__item svg { width: 30px; height: 30px; }
+.lp-strip__item span {
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* ============================================================
+   STACK — a pinned statement with four feature slabs riding over it
+   ============================================================ */
+
+.lp-stack { position: relative; }
+
+.lp-stack__head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  text-align: center;
+  padding-bottom: 56px;
+}
+
+/* the whole pinned region. The statement sticks for its entire
+   height, so the slabs slide up over it one after another. */
+.lp-stack__pin { position: relative; }
+
+/* Not pinned. Holding this for a full viewport meant arriving at a
+   460px band of nothing above the sentence — measured, and the
+   single worst gap on the page. It now takes the space it needs and
+   the slabs below do the pinning. */
+/* `gap` here was dead: this element has one child, the shell, so the
+   64px never landed anywhere and the trio's border-top ended up
+   flush against the last line of the sentence. The air has to go on
+   the trio itself, outside its border. */
+.lp-say {
+  display: flex;
+  flex-direction: column;
+  padding-block: 132px 72px;
+}
+.lp-say__text {
+  max-width: 1120px;
+  margin-inline: auto;
+  text-align: center;
+  font-size: clamp(30px, 3.7vw, 54px);
+  line-height: 1.2;
+  letter-spacing: -0.04em;
+}
+/* one span per word; `--p` lights them left to right as the
+   section scrolls, with a four-word soft edge. */
+.lp-say__w {
+  display: inline-block;
+  white-space: pre;
+  color: var(--ink);
+  opacity: clamp(0.14, calc((var(--p, 0) * (var(--n) + 5) - var(--i)) / 4), 1);
+  transition: opacity 0.12s linear;
+}
+
+.lp-say__trio {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin-top: 72px;
+  padding-top: 40px;
+  border-top: 1px solid var(--ink-12);
+}
+.lp-say__cell { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.lp-say__ico {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r-sm);
+  background: var(--lime);
+  color: #242426;
+}
+.lp-say__ico svg { width: 20px; height: 20px; }
+.lp-say__cell b { display: block; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink-75); }
+.lp-say__cell span { font-size: 14px; color: var(--ink-75); }
+
+/* ---------- the slabs ---------- */
+
+.lp-slabs { position: relative; }
+
+.lp-slab {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+}
+
+.lp-slab__card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 100%;
+  height: min(720px, 82vh);
+  padding: 8px;
+  border-radius: var(--r-xl);
+  background: var(--card);
+  box-shadow: 0 2px 4px rgba(36, 36, 38, 0.05), 0 24px 70px rgba(36, 36, 38, 0.1);
+  overflow: hidden;
+}
+
+.lp-slab__say {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 48px 44px;
+  border-radius: var(--r-xs);
+  background: var(--card);
+  z-index: 2;
+  min-width: 0;
+}
+.lp-slab__say h3 { max-width: 17ch; }
+.lp-slab__say p { max-width: 34ch; }
+.lp-slab__foot {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--ink-75);
+}
+.lp-slab__foot svg { width: 15px; height: 15px; flex: 0 0 auto; }
+
+/* The slabs alternate sides. In the reference the text panel is on
+   the left for slabs 1 and 3 and on the right for 2 and 4, which is
+   what stops four full-width cards in a row from reading as one
+   repeated template. */
+.lp-slab--flip .lp-slab__say { order: 2; }
+.lp-slab--flip .lp-slab__art { order: 1; }
+
+/* the visual half: a soft mesh carrying a cluster of cards —
+   two blurred ghosts behind, the real mock sharp in front. An
+   empty gradient panel is what made this section read as
+   unfinished; the reference always fills it. */
+.lp-slab__art {
+  position: relative;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  min-width: 0;
+}
+/* The photograph, with a soft scrim over it so the mock in front
+   stays legible. The scrim is what keeps the image reading as
+   ground rather than as content. */
+.lp-slab__art::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--art);
+  background-size: cover;
+  background-position: center;
+  transform: scale(1.06);
+}
+.lp-slab__art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(75% 65% at 50% 52%, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0.18) 68%),
+    linear-gradient(170deg, rgba(255, 255, 255, 0.34) 0%, rgba(235, 239, 245, 0.42) 100%);
+}
+.lp-slab__ghost, .lp-slab__mock { z-index: 1; }
+
+/* out-of-focus cards. Deliberately contentless: they read as depth,
+   and anything legible back here would compete with the mock. */
+.lp-slab__ghost {
+  position: absolute;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 20px 60px rgba(36, 36, 38, 0.12);
+  filter: blur(3px);
+  pointer-events: none;
+}
+.lp-slab__ghost--a {
+  width: 58%;
+  height: 34%;
+  top: 7%;
+  right: -8%;
+  transform: rotate(6deg);
+}
+.lp-slab__ghost--b {
+  width: 46%;
+  height: 26%;
+  bottom: 6%;
+  left: -10%;
+  transform: rotate(-5deg);
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.lp-slab__mock {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+}
+.lp-slab__mock > * { box-shadow: 0 28px 70px rgba(36, 36, 38, 0.18); }
+
+/* ============================================================
+   BENTO — three columns of alternating tall/short cards
+
+   Measured off the reference: 384 wide, 24 gutter, 584 tall /
+   382 short, r24. Columns rather than a grid, so column 2 can
+   lead with the short card and no horizontal seam runs straight
+   across the section.
+
+   Card heights are deliberately tighter than the reference's.
+   Ours carry shorter mocks, and matching 584 exactly left a
+   visible dead band between the body copy and the artwork — the
+   single thing that made this section read as unfinished.
+   ============================================================ */
+
+.lp-bento__head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--head-gap);
+  text-align: center;
+  padding-bottom: var(--head-pad);
+}
+.lp-bento__head p { max-width: 44ch; }
+
+.lp-bento__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.lp-bento__col {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
+.lp-bcard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 28px 24px 0;
+  border-radius: var(--r-xl);
+  overflow: hidden;
+  text-align: center;
+  min-width: 0;
+  color: var(--ink);
+}
+.lp-bcard--tall { height: 508px; }
+.lp-bcard--short { height: 372px; }
+
+.lp-bcard::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+.lp-bcard > * { position: relative; z-index: 1; }
+
+/* Three washes, not six: repeating the set across the two rows is
+   what keeps the grid reading as one family. Each is the page's own
+   blue-grey with a single warm or lime note, so no card announces
+   itself louder than its neighbour. */
+.lp-bcard--a::before {
+  background:
+    radial-gradient(88% 62% at 50% 0%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 62%),
+    linear-gradient(168deg, #eef1f6 0%, #dde4ee 100%);
+}
+.lp-bcard--b::before {
+  background:
+    radial-gradient(88% 62% at 50% 0%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 62%),
+    radial-gradient(70% 55% at 88% 96%, rgba(224, 197, 182, 0.55) 0%, rgba(224, 197, 182, 0) 70%),
+    linear-gradient(168deg, #f1efee 0%, #e3e8f0 100%);
+}
+.lp-bcard--c::before {
+  background:
+    radial-gradient(88% 62% at 50% 0%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 62%),
+    radial-gradient(74% 55% at 12% 96%, rgba(217, 255, 92, 0.34) 0%, rgba(217, 255, 92, 0) 68%),
+    linear-gradient(168deg, #eef2f5 0%, #e0e7ef 100%);
+}
+
+.lp-bcard__title { padding-top: 2px; }
+.lp-bcard__body {
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--ink-75);
+  max-width: 30ch;
+}
+.lp-bcard__art {
+  position: relative;
+  flex: 1;
+  align-self: stretch;
+  min-height: 0;
+  margin-top: 18px;
+  display: grid;
+  place-items: end center;
+  overflow: hidden;
+}
+
+.lp-pill {
+  align-self: flex-start;
+  transform-origin: left center;
+  margin-left: var(--off, 0);
+  padding: 7px 14px;
+  border-radius: var(--pill);
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(36, 36, 38, 0.06);
+  box-shadow: 0 4px 14px rgba(36, 36, 38, 0.06);
+  font-size: 14px;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ============================================================
+   SHOWCASE — the product sitting on a mesh, cut off at the fold
+   ============================================================ */
+
+.lp-show { padding-inline: 16px; }
+.lp-show__slab {
+  border-radius: var(--r-2xl);
+  background: var(--dark);
+  color: var(--on-dark);
+  padding: 104px 24px 0;
+  overflow: hidden;
+}
+.lp-show__slab .lp-lead { color: var(--on-dark-75); }
+.lp-show__head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--head-gap);
+  text-align: center;
+  max-width: var(--shell);
+  margin-inline: auto;
+}
+.lp-show__head p { max-width: 44ch; }
+
+.lp-show__frame {
+  position: relative;
+  max-width: var(--shell);
+  margin: var(--head-pad) auto 0;
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  padding: 44px 44px 0;
+  overflow: hidden;
+}
+.lp-show__frame::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to bottom, rgba(53, 54, 59, 0) 0%, rgba(53, 54, 59, 0.28) 55%, rgba(53, 54, 59, 0.72) 100%),
+    url('/img/show.jpg');
+  background-size: cover, cover;
+  background-position: center, center;
+}
+.lp-show__glass {
+  position: relative;
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  background: var(--card);
+  box-shadow: 0 -2px 60px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+/* the mock is deliberately cut off — it continues past the fold */
+.lp-show__clip { height: 520px; overflow: hidden; }
+.lp-show__clip .lp-app { height: 640px; max-width: none; box-shadow: none; border-radius: 0; overflow: hidden; }
+
+.lp-show__list {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  max-width: var(--shell);
+  margin-inline: auto;
+  padding: 56px 0 120px;
+}
+.lp-show__cell { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.lp-show__cell b {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+.lp-show__cell b i {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--lime);
+  color: #242426;
+  flex: 0 0 auto;
+}
+.lp-show__cell b i svg { width: 16px; height: 16px; stroke-width: 1.5; }
+.lp-show__cell span { font-size: 14px; line-height: 1.5; color: var(--on-dark-50); }
+
+/* ============================================================
+   PRICING — folder-tab toggle fused to the plan row
+   ============================================================ */
+
+.lp-price__head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--head-gap);
+  text-align: center;
+  padding-bottom: calc(var(--head-pad) - 20px);
+}
+.lp-price__head h2 { max-width: 20ch; }
+.lp-price__head p { max-width: 44ch; }
+/* the lime block that sits behind the closing words */
+.lp-price__hi {
+  display: inline-block;
+  padding: 0 14px 4px;
+  margin-left: 2px;
+  border-radius: var(--r-md);
+  background: var(--lime);
+  color: #242426;
+}
+
+.lp-price__tabs {
+  display: flex;
+  width: max-content;
+  margin-inline: auto;
+  padding: 3px 3px 0;
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  background: var(--pg);
+}
+.lp-price__tab {
+  min-width: 152px;
+  height: 45px;
+  border-radius: var(--r-lg) var(--r-lg) var(--r-xs) var(--r-xs);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-75);
+  transition: background 0.24s ease, color 0.24s ease;
+}
+.lp-price__tab:hover { color: var(--ink-75); }
+/* the selected half is the white one that the card row below
+   continues; before this both halves were tinted and the inactive
+   one read as selected */
+.lp-price__tab.on { background: var(--card); color: var(--ink); }
+
+.lp-price__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+  padding: 3px;
+  border-radius: var(--r-lg);
+  background: var(--pg);
+}
+
+.lp-plan {
+  display: flex;
+  flex-direction: column;
+  padding: 32px 28px;
+  border-radius: var(--r-xs);
+  background: var(--card);
+  min-width: 0;
+}
+.lp-plan:first-child { border-radius: var(--r-md) var(--r-xs) var(--r-xs) var(--r-md); }
+.lp-plan:last-child  { border-radius: var(--r-xs) var(--r-md) var(--r-md) var(--r-xs); }
+
+.lp-plan__name { font-size: 24px; line-height: 1.5; letter-spacing: -0.02em; color: var(--ink-75); }
+.lp-plan__note { font-size: 14px; line-height: 1.5; color: var(--ink-75); min-height: 3em; padding-top: 4px; }
+.lp-plan__price {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  padding-top: 26px;
+  font-size: 48px;
+  line-height: 1.25;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+.lp-plan__price em { font-style: normal; font-size: 28px; color: var(--ink-75); }
+.lp-plan__price span { font-size: 22px; color: var(--ink-75); }
+.lp-plan__per { font-size: 14px; color: var(--ink-75); padding-bottom: 26px; }
+.lp-plan__feats { display: flex; flex-direction: column; padding-top: 28px; }
+.lp-plan__feats li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--ink-07);
+  font-size: 14px;
+  color: var(--ink-75);
+}
+.lp-plan__feats li svg { width: 16px; height: 16px; flex: 0 0 auto; color: var(--ink-40, rgba(36, 36, 38, 0.4)); }
+.lp-plan__feats li:first-child { color: var(--ink); }
+.lp-plan__feats li:first-child svg { color: #6f8f16; }
+.lp-plan__feats li:last-child { border-bottom: 0; }
+
+.lp-ent {
+  display: flex;
+  align-items: center;
+  gap: 40px;
+  margin-top: 16px;
+  padding: 36px 40px;
+  border-radius: var(--r-lg);
+  background: var(--pg);
+}
+.lp-ent > .lp-btn { flex: 0 0 auto; }
+.lp-ent__text { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; flex: 1; min-width: 0; }
+.lp-ent__text p { max-width: 62ch; }
+
+/* ============================================================
+   RAIL — dark slab with a dragged row of capability cards
+   ============================================================ */
+
+.lp-rail { padding-inline: 16px; }
+.lp-rail__slab {
+  border-radius: var(--r-2xl);
+  background: var(--dark);
+  color: var(--on-dark);
+  padding: 88px 0 40px;
+  overflow: hidden;
+}
+/* centred, as in the reference — the carousel below is what carries
+   the horizontal weight, so a left-aligned head fought it */
+.lp-rail__head {
+  display: flex;
+  justify-content: center;
+  padding: 0 max(24px, calc((100% - var(--shell)) / 2)) var(--head-pad);
+}
+.lp-rail__head > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--head-gap);
+  text-align: center;
+  min-width: 0;
+}
+.lp-rail__head p { max-width: 44ch; }
+
+.lp-rail__track {
+  display: flex;
+  gap: 20px;
+  padding-left: max(24px, calc((100% - var(--shell)) / 2));
+  padding-right: 24px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding-left: max(24px, calc((100% - var(--shell)) / 2));
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.lp-rail__track::-webkit-scrollbar { display: none; }
+
+.lp-rcard {
+  flex: 0 0 auto;
+  width: min(940px, 84vw);
+  display: grid;
+  grid-template-columns: 1fr 264px;
+  gap: 40px;
+  padding: 40px;
+  border-radius: var(--r-xl);
+  scroll-snap-align: start;
+  color: #242426;
+  min-height: 340px;
+  min-width: 0;
+}
+.lp-rcard--0 { background: var(--lime); }
+.lp-rcard--1 { background: var(--clay); }
+.lp-rcard--2 { background: var(--mist); }
+.lp-rcard--3 { background: #dfe3d6; }
+
+.lp-rcard__say { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.lp-rcard__say p { font-size: 18px; line-height: 1.5; max-width: 42ch; }
+
+.lp-rcard__facts { display: flex; flex-direction: column; min-width: 0; }
+.lp-rcard__art {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--r-sm);
+  margin-bottom: 24px;
+  background: rgba(36, 36, 38, 0.14);
+  display: grid;
+  place-items: center;
+  color: rgba(36, 36, 38, 0.75);
+}
+.lp-rcard__art svg { width: 24px; height: 24px; }
+.lp-rcard__fact { padding: 14px 0; border-top: 1px solid rgba(36, 36, 38, 0.2); }
+.lp-rcard__fact span { display: block; font-size: 13px; color: rgba(36, 36, 38, 0.55); }
+.lp-rcard__fact b { display: block; font-size: 15px; font-weight: 500; letter-spacing: -0.01em; padding-top: 2px; }
+
+.lp-rail__foot {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 36px max(24px, calc((100% - var(--shell)) / 2)) 0;
+}
+.lp-rail__nav { display: flex; gap: 10px; }
+.lp-rail__nav button {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--pill);
+  background: var(--dark-2);
+  color: var(--on-dark);
+  transition: background 0.2s ease;
+}
+.lp-rail__nav button:hover { background: #5e616b; }
+.lp-rail__nav button svg { width: 17px; height: 17px; }
+.lp-rail__bar { display: flex; gap: 4px; margin-left: auto; }
+.lp-rail__bar i { width: 26px; height: 3px; border-radius: var(--pill); background: var(--on-dark-12); transition: background 0.25s ease; }
+.lp-rail__bar i.on { background: var(--lime); }
+
+/* ============================================================
+   FAQ — sticky category rail beside an accordion
+   ============================================================ */
+
+.lp-faq__head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--head-gap);
+  text-align: center;
+  padding-bottom: var(--head-pad);
+}
+.lp-faq__head p { max-width: 44ch; }
+/* the reference sets the closing word of this heading in a lime
+   slab rather than greying it out — same treatment as the pricing
+   headline, so the two read as one device */
+.lp-faq__head h2 em {
+  display: inline-block;
+  padding: 0 16px 5px;
+  margin-left: -4px;
+  border-radius: var(--r-md);
+  background: var(--lime);
+  color: #242426;
+  font-style: normal;
+}
+
+.lp-faq__grid {
+  display: grid;
+  grid-template-columns: 296px 1fr;
+  gap: 24px;
+  align-items: stretch;
+}
+
+/* Sticky left it hanging 400px below the top of the accordion,
+   detached from the list it belongs to. It is a full-height card
+   beside the list, exactly as in the reference. */
+.lp-faq__side {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
+  border-radius: var(--r-xl);
+  background: var(--pg);
+}
+.lp-faq__side button {
+  padding: 16px 18px;
+  border-radius: var(--r-md);
+  text-align: left;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  color: var(--ink-75);
+  transition: background 0.22s ease, color 0.22s ease;
+}
+.lp-faq__side button.on { background: var(--card); color: var(--ink); }
+
+.lp-faq__list { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
+.lp-q {
+  border-radius: var(--r-md);
+  background: var(--card);
+  border: 1px solid var(--ink-07);
+  overflow: hidden;
+  transition: border-color 0.22s ease;
+}
+.lp-q.on { border-color: var(--ink-12); }
+.lp-q__btn {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  padding: 26px 28px;
+  text-align: left;
+  font-size: clamp(17px, 1.5vw, 21px);
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.lp-q__btn i {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--pill);
+  background: var(--ink-07);
+  color: var(--ink-75);
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.22s ease, color 0.22s ease;
+}
+.lp-q__btn i svg { width: 16px; height: 16px; }
+.lp-q.on .lp-q__btn i { transform: rotate(45deg); background: var(--dark); color: #ffffff; }
+.lp-q__body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.34s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.lp-q.on .lp-q__body { grid-template-rows: 1fr; }
+.lp-q__body > div { overflow: hidden; }
+.lp-q__body p {
+  padding: 0 28px 28px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink-75);
+  max-width: 68ch;
+}
+
+.lp-ask {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+  padding: 36px 40px;
+  border-radius: var(--r-md);
+  background: var(--pg);
+}
+.lp-ask__text { display: flex; flex-direction: column; gap: 14px; align-items: flex-start; min-width: 260px; flex: 1; }
+.lp-ask__text p { max-width: 52ch; font-size: 15px; }
+
+/* ============================================================
+   CLOSE — dark band with the mock bleeding off the bottom
+   ============================================================ */
+
+.lp-closewrap { background: var(--pg); padding-inline: 16px; }
+.lp-close {
+  position: relative;
+  border-radius: 0 0 var(--r-2xl) var(--r-2xl);
+  background: var(--dark);
+  color: var(--on-dark);
+  padding: 104px 24px 0;
+  overflow: hidden;
+}
+.lp-close__head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  text-align: center;
+  max-width: var(--shell);
+  margin-inline: auto;
+}
+.lp-close__head h2 { max-width: 18ch; }
+.lp-close__head p { max-width: 44ch; }
+
+/* the mock is cropped on purpose: it runs past the bottom edge */
+.lp-close__stage {
+  max-width: var(--shell);
+  margin: 88px auto 0;
+  height: 380px;
+  overflow: hidden;
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  padding: 10px 10px 0;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.05));
+}
+.lp-close__stage .lp-app { height: 640px; max-width: none; border-radius: var(--r-xs) var(--r-xs) 0 0; opacity: 0.62; overflow: hidden; }
+
+/* ============================================================
+   FOOTER
+   ============================================================ */
+
+.lp-foot { background: var(--pg); padding-top: 96px; overflow: clip; }
+.lp-foot__grid {
+  display: grid;
+  grid-template-columns: 1fr repeat(4, auto);
+  gap: 48px;
+  align-items: start;
+}
+.lp-foot__brand { display: flex; flex-direction: column; gap: 16px; max-width: 30ch; }
+.lp-foot__brand p { font-size: 14px; line-height: 1.5; color: var(--ink-75); }
+.lp-foot__col { display: flex; flex-direction: column; gap: 12px; min-width: 120px; }
+.lp-foot__col h4 { font-size: 18px; letter-spacing: -0.02em; }
+.lp-foot__col a { font-size: 14px; color: var(--ink-75); text-decoration: none; }
+.lp-foot__col a:hover { color: var(--ink); }
+
+/* the oversized wordmark, clipped by the page edge */
+.lp-foot__mark {
+  position: relative;
+  margin-top: 48px;
+  /* shorter than the glyphs are tall: the wordmark is meant to run
+     off the bottom of the page, as it does in the reference */
+  height: clamp(84px, 14.4vw, 214px);
+  overflow: hidden;
+}
+.lp-foot__mark span {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  font-family: var(--font-logo);
+  font-size: clamp(120px, 19vw, 270px);
+  line-height: 1.25;
+  letter-spacing: -0.05em;
+  font-weight: 800;
+  color: var(--ink);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.lp-foot__bar {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: -56px;
+  padding-bottom: 28px;
+}
+.lp-foot__bar p {
+  padding: 14px 22px;
+  border-radius: var(--pill);
+  background: var(--card);
+  font-size: 14px;
+  color: var(--ink-75);
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 1180px) {
+  .lp { --edge: 28px; }
+  .lp-sec--pad { padding-block: 96px; }
+  .lp-rcard { grid-template-columns: 1fr 230px; }
+}
+
+@media (max-width: 1024px) {
+  .lp-nav__links { display: none; }
+  /* the links' auto margins were what pushed this group to the far
+     edge; with them hidden it takes that job over */
+  .lp-nav__right { margin-left: auto; }
+  .lp-burger { display: grid; }
+  .lp-nav__login { display: none; }
+
+  .lp-app { grid-template-columns: 64px 1fr; height: 540px; }
+  .lp-app__grid { grid-template-columns: 1fr 1fr; }
+  .lp-hcard--wide { grid-column: span 2; }
+
+  .lp-slab__card { grid-template-columns: 1fr; height: min(760px, 86vh); }
+  .lp-slab__say { padding: 32px 28px; gap: 14px; }
+  /* one column: the text always leads, whichever side it took on
+     the wide layout */
+  .lp-slab--flip .lp-slab__say { order: 0; }
+  .lp-slab--flip .lp-slab__art { order: 0; }
+  .lp-slab__art { min-height: 280px; }
+  .lp-slab__mock { left: 6%; right: 6%; }
+
+  /* the three bento columns dissolve so their six cards reflow as
+     ordinary grid items */
+  .lp-bento__grid { grid-template-columns: repeat(2, 1fr); }
+  .lp-bento__col { display: contents; }
+  .lp-bcard--tall, .lp-bcard--short { height: 440px; }
+  .lp-show__list { grid-template-columns: 1fr; gap: 24px; }
+  .lp-faq__grid { grid-template-columns: 1fr; }
+  .lp-faq__side {
+    position: static;
+    flex-direction: row;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .lp-faq__side::-webkit-scrollbar { display: none; }
+  .lp-faq__side button { white-space: nowrap; }
+
+  .lp-foot__grid { grid-template-columns: 1fr 1fr; gap: 36px; }
+  .lp-foot__brand { grid-column: 1 / -1; }
+}
+
+@media (max-width: 900px) {
+  .lp-price__grid { grid-template-columns: 1fr; }
+  .lp-plan:first-child,
+  .lp-plan:last-child { border-radius: var(--r-xs); }
+  .lp-plan__note { min-height: 0; }
+  .lp-ent { flex-direction: column; align-items: flex-start; gap: 24px; padding: 28px; }
+  .lp-ask { grid-template-columns: 1fr; }
+  .lp-ask__art { margin: 0; height: 180px; border-radius: var(--r-sm); }
+  .lp-rcard { grid-template-columns: 1fr; gap: 24px; padding: 28px; }
+  .lp-rcard__art { margin-bottom: 20px; }
+  .lp-strip__panel { grid-auto-flow: row; grid-template-columns: repeat(3, 1fr); grid-auto-columns: auto; row-gap: 24px; }
+}
+
+@media (max-width: 760px) {
+  .lp { --edge: 20px; }
+  .lp-hero { padding-top: 124px; }
+  .lp-sec--pad { padding-block: 76px; }
+  .lp-sec--tight { padding-block: 60px; }
+
+  /* the stage stops tilting: at this width the perspective reads as
+     a rendering fault rather than depth */
+  .lp-stage { transform: none; margin-top: 48px; }
+  .lp-hcard { transform: none; }
+  .lp-app { grid-template-columns: 1fr; height: auto; }
+  .lp-app__rail { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--ink-07); padding: 12px 16px; }
+  .lp-app__rail .sp { flex: 1; }
+  .lp-app__main { padding: 20px 16px 16px; }
+  .lp-app__ttl { font-size: 24px; }
+  .lp-app__grid { grid-template-columns: 1fr; }
+  .lp-hcard--tall, .lp-hcard--wide { grid-row: auto; grid-column: auto; }
+  .lp-spark { min-height: 150px; }
+
+  /* the pinned stack unrolls into ordinary stacked sections */
+  .lp-say { position: static; height: auto; padding-block: 72px; gap: 40px; }
+  .lp-slab { position: static; height: auto; padding-bottom: 16px; }
+  .lp-slab__card { height: auto; }
+  .lp-say__trio { grid-template-columns: 1fr; gap: 18px; }
+
+  .lp-bento__grid { grid-template-columns: 1fr; }
+  .lp-bcard--tall, .lp-bcard--short { height: auto; min-height: 380px; }
+  .lp-show__slab { padding-top: 64px; }
+  .lp-show__frame { margin-top: 44px; padding: 20px 20px 0; }
+  .lp-show__clip { height: 360px; }
+  .lp-rail__slab { padding-top: 60px; }
+  .lp-close { padding-top: 72px; }
+  .lp-close__stage { margin-top: 56px; height: 260px; }
+
+  .lp-foot__grid { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 560px) {
+  .lp-nav { padding-left: 14px; }
+  .lp-nav__right .lp-btn { display: none; }
+
+  .lp-hero__cta { flex-direction: column; gap: 18px; }
+  .lp-btn--lg { --bc: 44px; height: 56px; font-size: 16px; padding-right: 22px; }
+
+  .lp-strip__panel { grid-template-columns: repeat(2, 1fr); }
+  .lp-app__pick { display: none; }
+  .lp-app__bar { gap: 10px; }
+  .lp-pill { font-size: 13px; padding: 6px 11px; margin-left: calc(var(--off, 0) / 2); }
+  .lp-strip__bar { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .lp-strip__link { margin-left: 0; }
+
+  .lp-price__tabs { width: 100%; }
+  .lp-price__tab { flex: 1; min-width: 0; }
+  .lp-plan { padding: 26px 22px; }
+  .lp-q__btn { padding: 20px; gap: 14px; }
+  .lp-q__body p { padding: 0 20px 22px; }
+  .lp-ask { padding: 26px; }
+  .lp-rcard { width: 84vw; padding: 24px; }
+  .lp-show__slab, .lp-rail__slab, .lp-close { padding-inline: 16px; }
+  .lp-foot__grid { grid-template-columns: 1fr; gap: 28px; }
+  /* At phone width the visible strip of the wordmark is barely
+     taller than the fade itself, so it stopped reading as a word
+     and became a smudge behind the copyright pill. A smaller
+     wordmark showing a taller share of its own glyphs keeps the
+     proportion the desktop has. */
+  .lp-foot__mark { height: 58px; }
+  .lp-foot__mark span { font-size: 74px; }
+  /* the bar overlaps the wordmark on desktop; at this width the
+     pill is wide enough to cover it entirely and the leftovers
+     read as stray marks, so it sits under instead */
+  .lp-foot__bar { margin-top: 10px; justify-content: center; }
+}
+
+@media (max-width: 420px) {
+  .lp { --edge: 16px; }
+  .lp-slab__say { padding: 24px 20px; }
+  .lp-bcard { padding: 22px 18px 0; }
+  .lp-panel { padding: 14px; }
+  .lp-panel__big { font-size: 28px; }
+  .lp-app__ttl { font-size: 21px; }
+  .lp-pill { font-size: 12px; padding: 5px 10px; margin-left: 0; }
+  /* the percentage column is the first thing the mock can spare */
+  .lp-brk__row em { display: none; }
+  .lp-close__stage { padding-inline: 6px; }
+  .lp-show__frame { padding: 14px 14px 0; }
+}
+
+/* The hero stage arrives with a small scale as well as a rise, so
+   the entrance and the scroll-driven tilt never fight over the
+   same transform: the wrapper animates, the stage inside tilts. */
+.lp-rv--zoom { transform: translateY(var(--rv-y, 28px)) scale(0.9); transform-origin: 50% 0; }
+.lp-rv--zoom.is-in { transform: none; }
+
+/* cards settle scale as well as position, which is what gives the
+   reference's grids their arrival rather than a plain slide */
+.lp-bcard.lp-rv { transform: translateY(var(--rv-y, 24px)) scale(0.96); transform-origin: 50% 100%; }
+.lp-bcard.lp-rv.is-in { transform: none; }
+
+
+/* ============================================================
+   SafePay additions: the helpers MuhAI wrote as inline styles,
+   moved here, plus the command line in the run-it cards.
+   ============================================================ */
+.lp-ml { margin-left: auto; }
+.lp-mta { margin-top: auto; }
+.lp-pt8 { padding-top: 8px; }
+.lp-pt10 { padding-top: 10px; }
+.lp-pt14 { padding-top: 14px; }
+.lp-min0 { min-width: 0; }
+.lp-w100 { width: 100%; }
+.lp-num { font-variant-numeric: tabular-nums; }
+.lp-soft { color: var(--ink-75); }
+.lp-meta { font-size: 12px; color: var(--ink-75); }
+.lp-ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lp-float { box-shadow: 0 2px 4px rgba(36, 36, 38, 0.05), 0 16px 40px rgba(36, 36, 38, 0.12); }
+.lp-float--line { border-color: rgba(36, 36, 38, 0.1); }
+.lp-spark--fixed { height: 130px; flex: none; }
+.lp-rule { height: 1px; background: var(--ink-07); margin-top: 12px; }
+.lp-art-pad { width: 100%; padding-bottom: 24px; }
+.lp-stack10 { display: flex; flex-direction: column; gap: 10px; }
+.lp-who { font-size: 20px; letter-spacing: -0.02em; padding-top: 8px; }
+.lp-tiers { display: flex; flex-direction: column; gap: 6px; width: 100%; padding-bottom: 22px; }
+.lp-ring { display: grid; place-items: center; padding-bottom: 26px; }
+.lp-ring svg { width: 186px; height: 186px; }
+.lp-ring__arc { transition: stroke-dashoffset 1.25s cubic-bezier(0.16, 1, 0.3, 1); }
+
+.lp-due { display: flex; gap: 10px; align-items: flex-end; justify-content: center; width: 100%; min-width: 0; padding-bottom: 28px; }
+.lp-due__side { flex: 0 1 86px; padding: 12px 10px; min-width: 0; opacity: 0.55; text-align: center; }
+.lp-due__v { font-size: 15px; letter-spacing: -0.02em; }
+.lp-due__k { font-size: 11px; color: var(--ink-75); padding-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lp-due__mid { flex: 1 1 150px; max-width: 170px; padding: 16px; text-align: center; min-width: 0; }
+.lp-due__ico { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--pg); margin: 0 auto 10px; }
+.lp-due__ico svg { width: 18px; height: 18px; color: var(--ink-50); }
+.lp-due__big { font-size: 22px; letter-spacing: -0.02em; }
+
+.lp-alert { padding: 0; overflow: hidden; }
+.lp-alert__top { display: flex; gap: 12px; align-items: center; padding: 16px; }
+.lp-alert__ico { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 12px; background: rgba(190, 70, 60, 0.12); color: #a4433a; flex: 0 0 auto; }
+.lp-alert__ico svg { width: 17px; height: 17px; }
+.lp-alert__txt { min-width: 0; text-align: left; font-size: 14px; }
+.lp-alert__foot { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--pg); font-size: 13px; color: var(--ink-75); }
+.lp-alert__ok { margin-left: auto; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 8px; background: var(--lime); color: #242426; flex: 0 0 auto; }
+.lp-alert__ok svg { width: 13px; height: 13px; }
+
+/* a shell command where MuhAI printed a price */
+.lp-plan__price--cmd { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 30px; letter-spacing: -0.02em; padding-top: 30px; overflow: hidden; text-overflow: ellipsis; }
+.lp-plan__price--cmd em { font-size: 22px; color: var(--ink-25); margin-right: 10px; }
+@media (max-width: 560px) { .lp-plan__price--cmd { font-size: 24px; } }
+
+/* "SafePay" is seven letters where "Muhai" was five: the footer wordmark scales down to keep its edges */
+.lp-foot__mark { height: clamp(60px, 10vw, 150px); }
+.lp-foot__mark span { font-size: clamp(84px, 13.2vw, 188px); }
+@media (max-width: 560px) {
+  .lp-foot__mark { height: 42px; }
+  .lp-foot__mark span { font-size: 52px; }
+}
+.lp-foot__mark span { font-size: clamp(78px, 11.6vw, 168px); }
+@media (max-width: 560px) { .lp-foot__mark span { font-size: 50px; } }

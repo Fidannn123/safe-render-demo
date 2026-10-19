@@ -403,6 +403,16 @@ on phones. Inter Tight, Syne (wordmark) and IBM Plex Mono are bundled as latin w
 `@fontsource` 5.3.0 under `console/src/assets/fonts/` with their OFL licences; nothing loads from a
 CDN. Class names are unchanged, so the views needed no markup changes beyond the shell in `App.tsx`.
 
+### D-053 Landing page at `/`, console at `/console`
+The console bundle also serves a landing page, ported from the MuhAI landing (same sections, motion and
+stylesheet, `console/src/landing.css`) with SafePay copy. `/` loads the landing and `/console` the
+console; `main.tsx` picks one by path and loads it as its own chunk, so the two stylesheets never meet.
+nginx and Vite already fall back to `index.html`, so no server change. Icons come from `lucide-react`
+1.50.0 (ISC, bundled, pinned past the 14-day `minimumReleaseAge`), as in MuhAI. The slab and showcase
+photographs are Unsplash images bundled under `console/public/img/` (licence note there). Figures on the
+landing are illustrations on synthetic values, never measured results; the page says synthetic data and
+simulated bank in the hero and the footer.
+
 ## Open questions for the human
 None blocking. Human-only items: run `make evidence-llm` with an `ANTHROPIC_API_KEY` to publish real-model
 numbers, eligibility/registration with the organizer, recording the demo video.

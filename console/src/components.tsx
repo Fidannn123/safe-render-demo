@@ -1,20 +1,16 @@
 import { useState, type FormEvent, type ReactNode } from "react";
+import { ChartColumn, FileSearch, House, Inbox, ListChecks, RefreshCw, Search, ShieldCheck, Snowflake } from "lucide-react";
 import { dateTime, errorText, request, type Session } from "./api";
 
-export function Icon({ name }: { name: "queue" | "decision" | "metrics" | "lock" | "refresh" | "shield" }) {
-  const shapes = {
-    queue: <><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 8h6M9 12h6M9 16h3" /></>,
-    decision: <><path d="M4 3v17h17M7 15l4-6 4 3 5-7" /></>,
-    metrics: <><path d="M5 20v-6M10 20V8M15 20V3M20 20V10" /></>,
-    lock: <><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></>,
-    refresh: <><path d="M20 7v5h-5M4 17v-5h5M6 6a8 8 0 0 1 13 2M18 18A8 8 0 0 1 5 16" /></>,
-    shield: <><path d="M12 2l9 4v6c0 5-9 10-9 10S3 17 3 12V6z" /><path d="M16 8h-6a2 2 0 0 0 0 4h4a2 2 0 0 1 0 4H8" /></>,
-  };
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{shapes[name]}</svg>;
+const ICONS = { queue: ListChecks, decision: FileSearch, metrics: ChartColumn, lock: Snowflake, refresh: RefreshCw, shield: ShieldCheck, home: House, search: Search, inbox: Inbox };
+
+export function Icon({ name }: { name: keyof typeof ICONS }) {
+  const Glyph = ICONS[name];
+  return <Glyph aria-hidden="true" strokeWidth={1.6} />;
 }
 
-export function EmptyState({ title, children }: { title: string; children: ReactNode }) {
-  return <div className="empty"><h3>{title}</h3><p>{children}</p></div>;
+export function EmptyState({ title, icon = "inbox", children }: { title: string; icon?: keyof typeof ICONS; children: ReactNode }) {
+  return <div className="empty"><span className="empty-ico"><Icon name={icon} /></span><h3>{title}</h3><p>{children}</p></div>;
 }
 
 export function Notice({ children, kind = "error" }: { children: ReactNode; kind?: "error" | "success" }) {
