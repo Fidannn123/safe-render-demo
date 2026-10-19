@@ -4,7 +4,13 @@ title = "SafePay gitleaks configuration"
 useDefault = true
 
 # Published standards test vectors (RFC 8032 Ed25519 keys, RFC 9497 OPRF keys, RFC 8785 cases) are public
-# by design and must stay byte-exact. Nothing else is allowlisted.
+# by design and must stay byte-exact. Only these and the type annotations below are allowlisted.
 [[allowlists]]
 description = "Official RFC test vectors (public, not secrets)"
 paths = ['''(^|/)spec/vectors/''']
+
+# Type annotations such as `sign_key: Ed25519PrivateKey | None` match generic-api-key; they hold no value.
+[[allowlists]]
+description = "Python type annotations naming key classes"
+regexTarget = "match"
+regexes = ['''(?i)key\s*:\s*Ed25519(Private|Public)Key\b''']
