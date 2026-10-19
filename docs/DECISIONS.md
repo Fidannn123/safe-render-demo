@@ -1,7 +1,7 @@
 # DECISIONS.md: decision log
 
-Decisions taken where the four source documents (CLAUDE.md, architecture.md, COMPETITION.md,
-BUILD_PLAN.md) were silent, ambiguous or in tension. Newest last. IDs are referenced from `spec/`.
+Decisions taken where the four source documents (CLAUDE.md, architecture.md, and, now under
+`docs/internal/`, COMPETITION.md and BUILD_PLAN.md) were silent, ambiguous or in tension. Newest last. IDs are referenced from `spec/`.
 Status: **accepted** (decided, in spec/code), **open** (needs the human).
 
 ## G0: spec freeze and skeleton (19 Oct 2026)
@@ -200,12 +200,13 @@ non-verifiable, LGPLv3), disclosed as a downgrade and recorded as a known risk.
 ### D-031 Re-planned schedule (Baku)
 About 7.5 h behind plan. G1 by 17:30, G2 by 00:30, G3 by 05:00, v1 submission 07:59; final 17:59 unchanged.
 Phase 1 runs as parallel sessions in git worktrees (branches m1..m5), merged to main at each gate
-(docs/PARALLEL.md).
+(that guide was removed after the build).
 
 ### D-032 LLM configuration
 Mock stays the default everywhere (`SAFEPAY_LLM=mock`; tests and CI force it). For the demo the
 Anthropic provider uses `SAFEPAY_LLM_MODEL=claude-sonnet-5-5` (default value in settings, compose and
-`.env.example`); the human puts `ANTHROPIC_API_KEY` in a local, gitignored `.env`.
+`.env.example`); the human puts `ANTHROPIC_API_KEY` in a local, gitignored `.env`. Superseded in part by
+D-050 (SDK client, default `claude-opus-5-5`).
 
 ### D-033 How the database policy is enforced (implementation of D-013)
 `<project>/db_policy.py` runs after every `migrate` (post_migrate of the project AppConfig), as the owner,
@@ -334,6 +335,67 @@ Found by reading the compose setup, since Docker is not available on the machine
 - `docs/DECK.md` and `docs/DEMO_SCRIPT.md`: slide outline and video beats; numbers are placeholders
   pointing at generated evidence cells.
 
+### D-045 Policy 2026.10.19-2: new-payee splits and single reports are held (spec unfrozen by the human)
+The human asked to remove the known T2 losses and left the trade-off to us ("do the best for the
+product"), which we take as the go-ahead to change `spec/policy.yaml` for this purpose only.
+- `detectors.split_pattern.new_payee`: for a new or changed payee, 2 payments within 24 h summing over
+  `new_payee_cap` are a SPLIT_PATTERN (known payees keep 3 payments over `per_tx_cap`).
+- Weights: SPLIT_PATTERN 30 to 35 and NETWORK_REPORTED_1 25 to 35, so either one plus
+  NEW_OR_CHANGED_PAYEE (15) reaches the HOLD threshold of 50. Known-payee splits stay GUARDED (35 < 50).
+- Network codes still never DENY. A single false report can force a HOLD on a new payee, which the
+  architecture already accepts ("can force HOLD").
+- The first part of a new-payee split remains possible residual loss: nothing distinguishes it from an
+  honest first payment. The sim oracle (`sim/safepay_sim/twins/policy.py`) mirrors the rule.
+
+### D-046 Automatic velocity freeze
+`spec/policy.yaml velocity`: an agent token that makes `refusals_to_freeze` (3) refused requests within
+`window_seconds` (600) freezes its tenant through the normal T4 path (actor `system:velocity-monitor`,
+all agent tokens revoked, unfreeze needs owner + step-up). A refusal is a 403 on an agent token or a
+DENIED proposal. `TenantMiddleware` records it as audit event AGENT_REQUEST_REFUSED in its own
+transaction after the refused request rolled back (`core/apps/approvals/velocity.py`). Human 403s do not
+count. The STOLEN_TOKEN_DIRECT_API scenario now expects the freeze; the harness then unfreezes as owner.
+
+### D-047 Envelope encryption of personal data (crypto wrapper: human review)
+`core/apps/keystore/pii.py`: one AES-256 data key per tenant, created on first use, stored only wrapped
+under a deployment KEK with AES key wrap (RFC 3394, pyca). Ciphertext `v2:` + base64(nonce | ct | tag),
+associated data `safepay/pii/v2|<tenant>`. v1 ciphertexts (one deployment key) are still read. Files:
+`tenant-deks/<tenant>.v1` next to the keystore (shared by web and worker in the core volume).
+
+### D-048 Operator privacy attack in every evidence bundle
+`run_evidence` writes the captured intel transcript and the true payee list; `manage.py privacy_attack`
+(intel, which holds the epoch keys) computes, for 10^6 candidate IBANs, every PRF output and snapshot tag
+per epoch, SHA-256 of the input and the IBAN text, and matches them against all blinded elements and the
+operator's own answers. A positive control runs the same attack on a SHA-256 lookup and must recover
+every payee. Results go into `privacy.json` and metrics; `make verify-evidence` fails if anything was
+recovered or the control failed. Candidate count: `--privacy-candidates` (default 10^6).
+
+### D-049 OPRF power-on self-test
+`intel/apps/oprf/selftest.py` runs from `OprfConfig.ready()`: RFC 9497 key derivation, Evaluate,
+BlindEvaluate, a blind/finalize round trip and one tampered proof. Any mismatch raises and the service
+does not start. Mitigates (does not remove) the unaudited-binding risk.
+
+### D-050 Real-LLM extractor on the Anthropic SDK, and its measurement
+The extractor's real-provider branch uses the official `anthropic` SDK (added to core) instead of raw
+urllib: one tool-free `beta.messages.create` call with structured output (`output_config.format`
+JSON schema that holds facts only), `effort: low`, server-side `fallbacks: "default"`. Anything but
+`end_turn` (refusal, truncation), invalid JSON or a field outside the schema stops the extraction.
+Default model `claude-opus-5-5` (env `SAFEPAY_LLM_MODEL`). `make evidence-llm` (`manage.py measure_llm`)
+measures field accuracy, printed-bank-detail reporting and whether an injection reaches a planner tool
+argument on every twin invoice; `PROVIDER=mock` gives the baseline. No key exists in the build
+environment, so no real-model numbers are published yet.
+
+### D-051 Twin generator seeds and repository clean-up
+- Stressed calibration (seeds 50, 90): when the forecast already ends below the buffer without the big
+  payable, the opening balance is lifted by that deficit at once instead of in fixed steps.
+- Near-duplicate scenario (seeds 113, 148, 183, 198): the re-sent invoice is chosen among amounts that
+  are not an AMOUNT_ANOMALY for the vendor. `sim/tests/test_twins.py::test_other_seeds_generate`.
+- The harness regenerates `evidence/twins-<seed>` whenever it differs from what the current generator
+  builds, so a stale directory can no longer feed old labels.
+- Removed the parallel-session prompts (`docs/KICKOFF_PROMPT.md`, `docs/PARALLEL.md`) and the unused
+  `ops/scripts/stub.sh`; moved `BUILD_PLAN.md` and `COMPETITION.md` to `docs/internal/`. README badges
+  and `docs/assets/architecture.svg` are generated offline from Simple Icons (CC0) by scripts in
+  `docs/assets/`.
+
 ## Open questions for the human
-None blocking. Human-only items: `ANTHROPIC_API_KEY` in local `.env`, eligibility/registration with the
-organizer, recording the demo video.
+None blocking. Human-only items: run `make evidence-llm` with an `ANTHROPIC_API_KEY` to publish real-model
+numbers, eligibility/registration with the organizer, recording the demo video.

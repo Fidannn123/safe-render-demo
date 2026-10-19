@@ -9,7 +9,6 @@ SEED ?= 42
 UV ?= uv
 PNPM ?= $(if $(shell command -v pnpm 2>/dev/null),pnpm,corepack pnpm)
 COMPOSE ?= docker compose -f ops/docker-compose.yml
-STUB := bash ops/scripts/stub.sh
 HARNESS := cd sim && $(UV) run --frozen python -m safepay_sim.harness
 NATIVE := $(UV) run --frozen python ops/scripts/native_stack.py
 # docker (the default when docker is installed) or native (ops/scripts/native_stack.py, no Docker)

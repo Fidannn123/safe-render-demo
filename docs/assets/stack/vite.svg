@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="101" height="28" role="img" aria-label="Vite: 8">
+<title>Vite: 8</title>
+<clipPath id="r"><rect width="101" height="28" rx="5"/></clipPath>
+<g clip-path="url(#r)"><rect width="72" height="28" fill="#1f2a36"/><rect x="72" width="29" height="28" fill="#9135FF"/></g>
+<g transform="translate(9 6) scale(0.6667)" fill="#ffffff"><path d="M13.056 23.238a.57.57 0 0 1-1.02-.355v-5.202c0-.63-.512-1.143-1.144-1.143H5.148a.57.57 0 0 1-.464-.903l3.777-5.29c.54-.753 0-1.804-.93-1.804H.57a.574.574 0 0 1-.543-.746.6.6 0 0 1 .08-.157L5.008.78a.57.57 0 0 1 .467-.24h14.589a.57.57 0 0 1 .466.903l-3.778 5.29c-.54.755 0 1.806.93 1.806h5.745c.238 0 .424.138.513.322a.56.56 0 0 1-.063.603z"/></g>
+<g font-family="Verdana,DejaVu Sans,Geneva,sans-serif" font-size="12" font-weight="600">
+<text x="30" y="18.5" fill="#ffffff">Vite</text>
+<text x="82" y="18.5" fill="#ffffff">8</text></g>
+</svg>

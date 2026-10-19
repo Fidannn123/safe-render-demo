@@ -150,12 +150,25 @@ def readme_block(metrics: dict[str, Any]) -> str:
         f"Fraud network: {network['stopped_before_payment_b2']} of {network['reported_payee_scenarios']} "
         f"reported-payee scenarios stopped before payment with the network (B2), "
         f"{network['stopped_before_payment_b1']} without it (B1).",
+        *privacy_line(metrics),
         f"Full report with every residual attack: `evidence/run-{seed}/EVIDENCE.md` (generated). "
         f"Re-check signatures and numbers offline with `make verify-evidence SEED={seed}`.",
         "",
         README_END,
     ]
     return "\n".join(lines)
+
+
+def privacy_line(metrics: dict[str, Any]) -> list[str]:
+    attack = metrics["privacy"].get("operator_attack")
+    if not attack:
+        return []
+    return [
+        f"Privacy: a network operator holding every request, every epoch key and "
+        f"{attack['candidates_checked']:,} candidate IBANs recovered {attack['recovered_identifiers']} of "
+        f"the {attack['true_payees']} real payee accounts (the same attack on a plain SHA-256 lookup "
+        f"recovers {attack['control_recovered_identifiers']}).",
+    ]
 
 
 def _split_readme(text: str) -> tuple[str, str, str] | None:

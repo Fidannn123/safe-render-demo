@@ -35,18 +35,19 @@ that matter for money. Tier rules and caps: `spec/policy.yaml`. Verdict to tier 
 |---|---|---|---|
 | T0 Read | Read balances, invoices, forecast, analysis of its own tenant | Token scope; PostgreSQL row-level security (FORCE RLS) on every tenant table | `core/tests/test_db_roles.py::test_rls_zero_rows_without_tenant`, `::test_rls_rejects_writes_for_other_tenant`, `::test_rls_is_forced_for_the_owner_too`; `core/apps/ledger/tests/test_ledger_db.py::test_rls_hides_balances_without_tenant`, `::test_posting_to_other_tenants_account_rejected` |
 | T1 Auto | Pay a known registry payee under the per-payment and rolling 24 h caps with a low score | Guardian rules; caps checked under `SELECT ... FOR UPDATE` on the tenant limits row; funds reserved in the same transaction; `CHECK (balance >= 0)` | `core/apps/guardian/tests/test_decide.py::test_verdict_paths`; `core/apps/guardian/tests/test_rules.py::test_reason_code` (one case set per reason code); `core/apps/payments/tests/test_transitions.py::test_t1_happy_path_postings_audit_outbox`; `core/apps/payments/tests/test_concurrency.py::test_two_concurrent_reserves_cannot_overdraw`; `core/apps/ledger/tests/test_ledger_db.py::test_overdraft_rejected_immediately` |
-| T2 Guarded | Pay a new or changed payee under the new-payee caps with a clean network result | Signed Decision; cool-off with owner veto; the outbox will not deliver during the cool-off or after a veto | `core/apps/payments/tests/test_transitions.py::test_t2_cooloff_and_veto`, `::test_veto_after_cooloff_rejected`; `core/apps/bank_adapter/tests/test_delivery.py::test_freeze_and_t2_veto_stop_bank_calls` |
+| T2 Guarded | Pay a new or changed payee under the new-payee caps, with no network report and no split pattern | Signed Decision; cool-off with owner veto; the outbox will not deliver during the cool-off or after a veto; a second payment to the same new payee within 24 h, or one network report, is HOLD (policy 2026.10.19-2, D-045) | `core/apps/payments/tests/test_transitions.py::test_t2_cooloff_and_veto`, `::test_veto_after_cooloff_rejected`; `core/apps/bank_adapter/tests/test_delivery.py::test_freeze_and_t2_veto_stop_bank_calls`; `core/apps/guardian/tests/test_rules.py::test_reason_code` (cases `split-new-payee-*`); `sim/tests/test_twins.py::test_new_payee_split_and_single_report_are_held` |
 | T3 Human | Nothing: the agent can only queue the payment (HOLD) | Approver is not the accountable initiator (DB `CHECK (approver_id <> initiator_id)`); step-up TOTP within 5 min; reason required; two distinct approvers at or above the two-approver threshold; hard rules, registry account, freeze and funds re-checked at approval | `core/tests/test_api_flows.py::test_bank_detail_swap_is_held_and_four_eyes_hold`; `core/apps/payments/tests/test_transitions.py::test_two_approvers_required`, `::test_stale_step_up_rejected`, `::test_warning_must_be_acknowledged`, `::test_funds_guard_on_approval`; `core/apps/guardian/tests/test_recheck.py::test_payee_changed`, `::test_frozen`, `::test_duplicate_paid_since_decision`; `tests/spec/test_openapi.py::test_step_up_operations` |
-| T4 Emergency | Nothing: all outflow stops | Owner or approver freeze, or automatic freeze by the reconciler on a bank mismatch; freeze revokes every agent token; unfreeze needs the owner and a fresh step-up code | `core/tests/test_api_flows.py::test_freeze_revokes_agent_tokens_and_unfreeze_needs_owner`; `core/apps/payments/tests/test_transitions.py::test_frozen_tenant_cannot_approve_or_deliver`; `core/apps/bank_adapter/tests/test_delivery.py::test_bank_mismatch_freezes_and_incident_is_idempotent` |
+| T4 Emergency | Nothing: all outflow stops | Owner or approver freeze; automatic freeze by the reconciler on a bank mismatch; automatic freeze by the velocity monitor when one agent token makes 3 refused requests within 10 minutes (D-046); freeze revokes every agent token; unfreeze needs the owner and a fresh step-up code | `core/tests/test_api_flows.py::test_freeze_revokes_agent_tokens_and_unfreeze_needs_owner`, `::test_hijacked_agent_is_frozen_automatically_after_repeated_refusals`, `::test_human_refusals_do_not_count_toward_the_velocity_freeze`; `core/apps/payments/tests/test_transitions.py::test_frozen_tenant_cannot_approve_or_deliver`; `core/apps/bank_adapter/tests/test_delivery.py::test_bank_mismatch_freezes_and_incident_is_idempotent` |
 
 Agent tokens carry only the scopes T0, T1 and T2. They cannot reach approve, reject, veto, unfreeze,
 registry or configuration endpoints: `tests/spec/test_openapi.py::test_agent_cannot_reach_config_or_human_endpoints`
 and `::test_proposals_only_for_t1_t2_tokens`. `make demo` steps 5 and 6 show the same refusals over HTTP
-(`FORBIDDEN_SCOPE`, `SELF_APPROVAL`).
+(`FORBIDDEN_SCOPE`, `SELF_APPROVAL`), and the third refusal freezing the tenant automatically.
 
 What the tiers bound if the agent is fully hijacked: T1 loss is limited to known registry payees within
 the rolling caps; T2 loss is limited to the new-payee caps per payment and per rolling 24 h, and only if
-the owner does not veto during the cool-off; T3 and T4 allow no agent-initiated loss.
+the owner does not veto during the cool-off, and a hijacked agent that probes human-only endpoints freezes
+itself; T3 and T4 allow no agent-initiated loss.
 
 ## 3. Controls that do not depend on the LLM
 
@@ -64,6 +65,8 @@ the owner does not veto during the cool-off; T3 and T4 allow no agent-initiated 
 | Idempotent API writes | Idempotency-Key stored with request hash and response in the same transaction | `core/apps/payments/tests/test_idempotency.py::test_different_body_is_mismatch`, `::test_handler_failure_rolls_back_key` |
 | Settlement only with a valid bank signature; bank idempotent on `end_to_end_id` | `core/apps/bank_adapter/`, `bank_sandbox/` | `core/apps/bank_adapter/tests/test_delivery.py::test_forged_receipt_cannot_settle`, `::test_timeout_after_bank_commit_retries_exact_request_once`; `bank_sandbox/tests/test_transfers.py::test_same_e2e_different_body_is_409` |
 | Tamper-evident audit log (SHA-256 chain, RFC 8785 JSON, Ed25519 checkpoints) | `core/apps/audit/` | `core/apps/audit/tests/test_chain.py::test_tampered_event_detected`, `::test_verify_detects_forged_hash_inserted_by_owner`; `core/apps/audit/tests/test_checkpoints.py::test_checkpoint_links_and_tampering`; `make verify-audit` |
+| Account numbers and other personal data encrypted at rest with a per-tenant data key (AES-256-GCM), wrapped by a KEK (RFC 3394); a ciphertext moved to another tenant fails; deleting a wrapped key shreds only that tenant | `core/apps/keystore/pii.py` | `core/apps/keystore/tests/test_pii.py::test_each_tenant_has_its_own_wrapped_data_key`, `::test_ciphertext_moved_to_another_tenant_fails`, `::test_deleting_a_wrapped_key_shreds_only_that_tenant`, `::test_legacy_v1_ciphertext_is_still_readable` |
+| A real LLM refusal, truncation or out-of-schema output stops the extraction; it never guesses | `core/apps/agent/extractor.py` | `core/apps/agent/tests/test_injection.py::test_real_provider_refusal_or_truncation_stops_extraction`, `::test_real_provider_cannot_smuggle_server_owned_fields`, `::test_real_provider_output_is_validated_and_never_picks_the_payee` |
 | Passwords hashed with Argon2id first, PBKDF2 only to upgrade | settings of all three services | `core/tests/test_boot.py::test_argon2_is_first_and_pbkdf2_only_second`, `::test_new_passwords_use_argon2id` |
 | Service-to-service requests are Ed25519-signed with timestamp and nonce | `intel/`, `bank_sandbox/` | `intel/tests/test_request_signing.py::test_nonce_replay_rejected`, `::test_body_is_signed`, `::test_timestamp_outside_skew_rejected`; `bank_sandbox/tests/test_signing.py::test_request_signature_binds_every_component` |
 
@@ -72,6 +75,8 @@ the owner does not veto during the cool-off; T3 and T4 allow no agent-initiated 
 | Property | Proved by |
 |---|---|
 | The VOPRF wrapper matches the CFRG RFC 9497 vectors (ristretto255-SHA512, VOPRF mode) | `intel/tests/test_oprf_vectors.py` (all tests); `tests/spec/test_errors_and_vectors.py` |
+| The intel service re-checks those vectors and a tampered proof at every start-up and refuses to run on a mismatch | `intel/apps/oprf/selftest.py`; `intel/tests/test_privacy_attack.py::test_power_on_self_test_passes_on_the_rfc_vectors`, `::test_power_on_self_test_fails_closed_on_a_wrong_vector` |
+| An operator holding the full request transcript, every epoch key and 10^6 candidate IBANs recovers no looked-up payee, and repeated lookups of one payee cannot be linked; the same attack on a plain SHA-256 lookup recovers every payee (positive control) | `intel/apps/oprf/adversary.py`; `intel/tests/test_privacy_attack.py::test_operator_with_key_and_candidates_recovers_nothing`, `::test_control_naive_hash_lookup_is_fully_recovered`, `::test_attack_detects_a_client_that_leaks_the_prf_output_or_the_iban`; the evidence run (`evidence/run-42/privacy-attack.json`, `EVIDENCE.md` "Fraud network", README "Results"); `make verify-evidence` fails if it recovered anything |
 | A bad or swapped proof is rejected | `intel/tests/test_oprf_vectors.py::test_tampered_proof_is_rejected`, `::test_proof_from_other_key_is_rejected`, `::test_swapped_elements_are_rejected` |
 | Blind queries never carry the IBAN or the tag | `core/apps/intel_client/tests/test_privacy.py::test_blind_hit_and_miss_never_send_identifier_or_tag`; the evidence run searches every captured blind query for the twins' IBANs (`evidence/run-42/privacy.json`, and `EVIDENCE.md`, "Fraud network") |
 | The snapshot holds tags only, no payee identifiers | `intel/tests/test_snapshots.py::test_snapshot_reveals_no_payee_identifier` |
@@ -79,9 +84,9 @@ the owner does not veto during the cool-off; T3 and T4 allow no agent-initiated 
 | A report needs a bank-signed receipt proving the reporter paid that account | `intel/tests/test_reports.py::test_forged_receipt_signature_rejected`, `::test_receipt_paid_by_another_member_rejected`, `::test_payee_mismatch_rejected`, `::test_old_receipt_rejected` |
 | One count per member and payee; expiry; retraction only by the reporter | `intel/tests/test_reports.py::test_one_active_report_per_member_and_payee`, `::test_expired_report_no_longer_blocks_and_reports_expired`, `::test_retraction_by_non_reporter_forbidden` |
 
-Not proved: the stronger privacy test in `docs/architecture.md` section 2.7 (an adversary holding the
-server transcript, the server key and a large candidate IBAN list) is not implemented. What is measured
-is that no captured query contains an IBAN and that the server only ever sees blinded group elements.
+Scope of the privacy attack: it tries every equality and substring match the operator can compute
+(PRF outputs and snapshot tags per epoch, SHA-256 of the input, the IBAN text) against everything sent and
+answered. It is not a proof against an adversary who breaks ristretto255; that rests on RFC 9497.
 
 ## 5. Threat model
 
@@ -95,12 +100,12 @@ and component worst cases: `docs/architecture.md` section 1.
 | 2 | Bank detail change by email (invoice redirection) | Payee from registry; BANK_DETAIL_MISMATCH forces HOLD; new account is T2 or T3 with a network check | `core/tests/test_api_flows.py::test_bank_detail_swap_is_held_and_four_eyes_hold`; class BANK_DETAIL_SWAP | Social engineering of the staff who edit the registry |
 | 3 | Look-alike vendor or account | TR39 skeleton plus Damerau-Levenshtein; account prefix and suffix match; new-payee caps | `core/apps/guardian/tests/test_policy_and_detectors.py::test_names_look_alike`, `::test_accounts_look_alike`; class LOOKALIKE_VENDOR_OR_ACCOUNT | Heuristic false negatives |
 | 4 | Hijacked planner (excessive agency) | One consequential tool (`propose_payment`); tiers enforced server-side and in PostgreSQL | Section 2 | Bounded by T1 and T2 caps |
-| 5 | Stolen agent token | Scopes T0 to T2 only; at most 1 h TTL; stored as HMAC-SHA256(pepper, token) (`core/apps/accounts/service.py`); revoked by freeze | Class STOLEN_TOKEN_DIRECT_API; `make demo` steps 5 and 11 | Loss up to the rolling caps until someone freezes |
+| 5 | Stolen agent token | Scopes T0 to T2 only; at most 1 h TTL; stored as HMAC-SHA256(pepper, token) (`core/apps/accounts/service.py`); revoked by freeze; the velocity monitor freezes the tenant after 3 refused requests in 10 minutes | Class STOLEN_TOKEN_DIRECT_API (expects the automatic freeze); `make demo` steps 5 and 11 | A careful thief who only proposes ordinary payments stays within the rolling caps until someone freezes |
 | 6 | Insider self-approval | Accountable initiator is the human who issued the token (D-036); DB CHECK approver <> initiator; step-up; two approvers above the threshold | `core/tests/test_api_flows.py::test_bank_detail_swap_is_held_and_four_eyes_hold`; class SELF_APPROVAL | Collusion of two staff |
 | 7 | Double spend or race | Row lock on limits; UNIQUE fingerprint and nonce; `CHECK (balance >= 0)` | `core/apps/payments/tests/test_concurrency.py`; class CONCURRENT_DOUBLE_SUBMIT, DUPLICATE_OR_NEAR_DUPLICATE | None known |
 | 8 | Network poisoning by false reports | Bank-attested proof of payment; distinct reporters; expiry; never DENY | Section 4; class FALSE_REPORT_POISONING | Coordinated members can force HOLDs on an honest payee |
-| 9 | Curious network operator | VOPRF blind queries; local snapshot lookup | Section 4 | Operator sees member, time and query count |
-| 10 | Database exfiltration | IBANs encrypted with AES-256-GCM (AAD = tenant id); Argon2id passwords; HMAC-hashed tokens; RLS | `core/apps/vendors/models.py` | Key file on the same host as the data (see Known risks) |
+| 9 | Curious network operator | VOPRF blind queries; local snapshot lookup | Section 4, operator privacy attack | Operator sees member, time and query count |
+| 10 | Database exfiltration | Personal data encrypted under per-tenant data keys wrapped by a KEK; Argon2id passwords; HMAC-hashed tokens; RLS | `core/apps/keystore/tests/test_pii.py` | The KEK is a file on the same host as the data (see Known risks) |
 | 11 | Audit tampering or replay | Hash chain; signed checkpoints; single-use, field-bound, expiring Decisions; signed receipts | Section 3; `make verify-audit` | A key holder could rewrite events after the last exported checkpoint |
 | 12 | Paying into a cash shortfall | CASH_BUFFER_BREACH uses the same 13-week forecast; at approval it is a warning the approver must acknowledge | `core/apps/guardian/tests/test_recheck.py::test_cash_buffer_warning_needs_ack`; class CASH_BUFFER_BREACH | Forecast error on unusual weeks |
 | 13 | Supply chain | `uv.lock` and `pnpm-lock.yaml` pinned and installed frozen; pip-audit, pnpm audit and gitleaks in CI; bundled console assets, no CDN | `.github/workflows/ci.yml` | Zero-days in pinned dependencies |
@@ -109,30 +114,33 @@ and component worst cases: `docs/architecture.md` section 1.
 
 | ID | Risk | SafePay position |
 |---|---|---|
-| LLM01 | Prompt Injection | Extractor has no tools and its output is a pydantic model with `extra="forbid"`; raw text is tagged `untrusted` and dropped before the planner; payee comes from the registry. Tests: `core/apps/agent/tests/test_injection.py`. Harness: HIDDEN_INSTRUCTION. |
+| LLM01 | Prompt Injection | Extractor has no tools and its output is a pydantic model with `extra="forbid"`; raw text is tagged `untrusted` and dropped before the planner; payee comes from the registry. Tests: `core/apps/agent/tests/test_injection.py`. Harness: HIDDEN_INSTRUCTION. `make evidence-llm` measures the same with a real model. |
 | LLM02 | Sensitive Information Disclosure | The LLM receives only the invoice it extracts: no registry, credentials or other tenants. IBANs are masked in API responses and encrypted at rest. The network never receives a queried IBAN. |
 | LLM03 | Supply Chain | Locked dependencies, CI audits and secret scanning; the real model id is pinned via `SAFEPAY_LLM_MODEL`; the default is a local deterministic mock. |
 | LLM04 | Data and Model Poisoning | No training or fine-tuning. The analogous risk, poisoned shared fraud data, is handled by bank-attested reports and the never-DENY rule (section 4). |
-| LLM05 | Improper Output Handling | Model output is parsed only as JSON against a strict schema; server-owned fields (`invoice_id`, provenance, extractor) are overwritten after parsing; no output is executed or rendered as HTML. |
+| LLM05 | Improper Output Handling | The real model answers through structured output (a JSON schema with no server-owned fields); any extra field, refusal or truncation stops the extraction; the result is validated again by pydantic; nothing is executed or rendered as HTML. |
 | LLM06 | Excessive Agency | One consequential tool, `propose_payment`; agent tokens limited to T0 to T2; human-only endpoints refuse agent tokens; caps and tiers enforced in PostgreSQL. Section 2. |
 | LLM07 | System Prompt Leakage | The prompt holds no secrets or rules; every rule lives in `spec/policy.yaml` and the Guardian, so a leaked prompt gives an attacker nothing to bypass. |
 | LLM08 | Vector and Embedding Weaknesses | Not applicable: no retrieval, vector store or embeddings. |
 | LLM09 | Misinformation | Every number the agent shows comes from a deterministic function (forecast, analysis with source rows, financing match). The LLM only phrases. |
-| LLM10 | Unbounded Consumption | Invoice size limits (100 PDF pages, 200,000 characters), `max_tokens` on the provider call, OPRF quota per member per day. |
+| LLM10 | Unbounded Consumption | Invoice size limits (100 PDF pages, 200,000 characters), `max_tokens`, a timeout and bounded retries on the provider call, OPRF quota per member per day, and the velocity freeze on a misbehaving agent. |
 
 ## 7. Known risks
 
+Fixed in this version (DECISIONS.md D-045 to D-050): new-payee splits and single network reports are now
+held, a hijacked agent freezes itself, personal data uses per-tenant wrapped keys, the full operator
+privacy attack runs in every evidence bundle, the OPRF binding is self-tested at start-up, the twin seeds that
+used to fail now generate (covered by a test), and a real LLM can be measured with one command.
+
 | Risk | Status |
 |---|---|
-| `voprf` 0.2 binding is young and unaudited (the Rust core is Meta's) | Pinned; wrapped behind `intel/apps/oprf/port.py`; CFRG vectors in CI. This is not "audited cryptography". |
-| T2 residual loss | A new-payee attack that stays under the new-payee caps and scores below the HOLD threshold is paid after the cool-off unless the owner vetoes. The harness never vetoes, so every such case is reported as residual loss, per scenario, in `EVIDENCE.md` ("Attacks that still moved money"). Mitigations: lower new-payee caps, longer cool-off, or route all new payees to T3. |
+| `voprf` 0.2 binding is young and unaudited (the Rust core is Meta's) | Mitigated, not removed: pinned in `uv.lock`; wrapped behind `intel/apps/oprf/port.py`; CFRG vectors in CI and again at every intel start-up (fail closed). This is still not "audited cryptography"; an external audit or a second implementation is the remaining step. |
+| T2 residual loss | One attack class still moves money: the first payment of a split to a new payee. It looks exactly like a normal first payment to a new supplier, stays under the new-payee cap and waits out the cool-off; the second part is held. The harness never vetoes, so the case is listed in `EVIDENCE.md` ("Attacks that still moved money"). An owner watching the cool-off can veto it; routing every new payee to T3 would remove it at the cost of autonomy. |
+| Real LLM not measured in this bundle | The real-provider path is built and tested with a stubbed client, and `make evidence-llm` measures it on every twin invoice, but this repository's evidence uses the mock because no API key is available here. |
 | Single OPRF key holder | VOPRF stops per-client keys, not operator collusion or downtime. Threshold OPRF is roadmap. |
 | Coordinated false reports | Can force HOLDs, never losses. A dispute and suspension path exists for reporters. |
-| Keys on the same host as the data | Prototype only. All keys are files under `ops/dev-keys/` or the core volume. The KeyStore port is meant to map to a KMS or HSM. |
-| PII encryption is simpler than the design | One AES-256-GCM key per deployment with the tenant id as AAD, not a per-tenant data key wrapped by a KEK as in `docs/architecture.md` section 3.3. |
-| No automatic velocity freeze | The automatic T4 freeze comes from the reconciler on a bank mismatch. A freeze on unusual agent velocity is not built; caps still bound the loss. |
-| Stronger privacy test not built | See section 4. |
-| Real LLM not measured | All tests and the evidence run use the deterministic mock. `SAFEPAY_LLM=anthropic` works but has no measured injection results. |
+| Keys on the same host as the data | Prototype only. The KEK, signing keys and OPRF seeds are files under `ops/dev-keys/` or the core volume. The KeyStore port and the KEK are meant to map to a KMS or HSM. |
+| Associated data is per tenant, not per field | A ciphertext cannot move between tenants, but within one tenant it is not bound to its table, column and row as `docs/architecture.md` section 3.3 describes. |
 | Scripted attackers | Attack classes are scripted scenarios, not adaptive adversaries. |
 | Synthetic data and simulated bank | Disclosed on every artifact. A real pilot is the next step. |
 | No external review | No penetration test, cryptographic audit or legal review of cross-business data sharing. |

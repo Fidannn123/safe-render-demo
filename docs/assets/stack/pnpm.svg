@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="109" height="28" role="img" aria-label="pnpm: 10">
+<title>pnpm: 10</title>
+<clipPath id="r"><rect width="109" height="28" rx="5"/></clipPath>
+<g clip-path="url(#r)"><rect width="72" height="28" fill="#1f2a36"/><rect x="72" width="37" height="28" fill="#F69220"/></g>
+<g transform="translate(9 6) scale(0.6667)" fill="#ffffff"><path d="M0 0v7.5h7.5V0zm8.25 0v7.5h7.498V0zm8.25 0v7.5H24V0zM2 2h3.5v3.5H2zm8.25 0h3.498v3.5H10.25zm8.25 0H22v3.5h-3.5zM8.25 8.25v7.5h7.498v-7.5zm8.25 0v7.5H24v-7.5zm2 2H22v3.5h-3.5zM0 16.5V24h7.5v-7.5zm8.25 0V24h7.498v-7.5zm8.25 0V24H24v-7.5z"/></g>
+<g font-family="Verdana,DejaVu Sans,Geneva,sans-serif" font-size="12" font-weight="600">
+<text x="30" y="18.5" fill="#ffffff">pnpm</text>
+<text x="82" y="18.5" fill="#14202b">10</text></g>
+</svg>

@@ -11,7 +11,7 @@ SECRET_KEY = "test-only-insecure-key-not-a-secret"  # noqa: S105
 ALLOWED_HOSTS = ["testserver", "localhost", "127.0.0.1"]
 
 # Tests run as the OWNER (creates the test DB, migrates, applies db_policy); role tests connect
-# separately as the APP role. SAFEPAY_TEST_DB_SUFFIX isolates parallel worktrees (docs/PARALLEL.md).
+# separately as the APP role. SAFEPAY_TEST_DB_SUFFIX isolates parallel worktrees (docs/DECISIONS.md D-034).
 _SUFFIX = env("SAFEPAY_TEST_DB_SUFFIX")
 if _SUFFIX and not _SUFFIX.isalnum():
     raise ValueError("SAFEPAY_TEST_DB_SUFFIX must be alphanumeric")

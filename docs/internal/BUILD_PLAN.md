@@ -125,7 +125,7 @@ Fix failures, add attack cases, improve console, re-run evidence, regenerate doc
 ## Per-session prompt template (paste into a new Claude Code session)
 
 ```
-Read CLAUDE.md, docs/architecture.md, docs/BUILD_PLAN.md and the spec/ folder.
+Read CLAUDE.md, docs/architecture.md, docs/internal/BUILD_PLAN.md and the spec/ folder.
 You own module <MODULE ID AND NAME> only (Phase <N>, session <X> in BUILD_PLAN.md).
 Build it to its acceptance gate. Do not edit spec/ or other modules.
 Write tests first. Run `make verify` until green.

@@ -1,33 +1,62 @@
-# SafePay
+<h1 align="center">SafePay</h1>
 
-A cash-flow-safe payables copilot for SMEs: an AI agent that pays supplier invoices only after
-deterministic rules, a cash-buffer forecast and a privacy-preserving cross-business fraud network agree.
-FinTechathon 2026, International Track, **Topic E (SME Finance Copilot)**: supplier payments are the
-outflow side of cash-flow management, next to cash-flow alerts, financial analysis and financing matching.
+<p align="center"><b>A cash-flow-safe payables copilot for small businesses.</b><br>
+An AI agent pays supplier invoices only after deterministic rules, a cash-buffer forecast and a
+privacy-preserving fraud network shared across businesses all agree.</p>
+
+<p align="center">
+<img src="docs/assets/stack/python.svg" alt="Python 3.13" height="28">
+<img src="docs/assets/stack/django.svg" alt="Django 5.2 LTS" height="28">
+<img src="docs/assets/stack/postgresql.svg" alt="PostgreSQL 18" height="28">
+<img src="docs/assets/stack/react.svg" alt="React 19" height="28">
+<img src="docs/assets/stack/typescript.svg" alt="TypeScript" height="28">
+<img src="docs/assets/stack/vite.svg" alt="Vite" height="28">
+<img src="docs/assets/stack/pnpm.svg" alt="pnpm" height="28">
+<img src="docs/assets/stack/uv.svg" alt="uv" height="28">
+<img src="docs/assets/stack/docker.svg" alt="Docker compose" height="28">
+<img src="docs/assets/stack/nginx.svg" alt="nginx" height="28">
+<img src="docs/assets/stack/pytest.svg" alt="pytest and Hypothesis" height="28">
+<img src="docs/assets/stack/ruff.svg" alt="Ruff and mypy" height="28">
+<img src="docs/assets/stack/githubactions.svg" alt="GitHub Actions" height="28">
+<img src="docs/assets/stack/claude.svg" alt="Claude (optional LLM)" height="28">
+</p>
+
+<p align="center">FinTechathon 2026, International Track, <b>Topic E (SME Finance Copilot)</b>.
+Supplier payments are the outflow side of cash-flow management, next to cash-flow alerts, financial
+analysis and financing matching.</p>
 
 > **All data is SYNTHETIC and the bank is SIMULATED. No real money moves.** The default LLM is a
-> deterministic mock; a real provider is optional (`SAFEPAY_LLM=anthropic`).
+> deterministic mock; a real model is optional (`SAFEPAY_LLM=anthropic`).
 
-## What works
+## Why
 
-- **Agent payments, end to end**: invoice (email or text PDF) → quarantined extractor → planner proposes
-  a payment to the vendor's *registry* account (never the invoice's) → Guardian signs an Ed25519 Decision
-  (ALLOW T1 / GUARDED T2 / HOLD T3 / DENY) → funds reserved under a row lock → transactional outbox →
-  simulated bank → bank-signed receipt verified → SETTLED → reconciled.
-- **Human controls**: password + TOTP login, step-up, four-eyes approval (the person who issued the
-  agent's token cannot approve its proposals), two approvers at or above the high cap, T2 veto, T4 freeze.
-- **Fraud network**: blind VOPRF lookups (RFC 9497, ristretto255) and bank-attested, member-signed reports.
-- **Cash-flow copilot**: 13-week forecast, LOW_BUFFER / SHORTFALL alerts, payables schedule with
-  early-payment discounts, DPO / DSO / burn / top vendors, financing match over a synthetic catalog.
-- **Evidence**: `make evidence` runs every twin scenario (benign, attacks, ambiguous) under B0 (undefended agent),
-  B1 (Guardian + tiers) and B2 (B1 + network) and writes a signed, re-verifiable bundle with
-  `EVIDENCE.md`. Every number comes from that run; none is typed into this repository.
-- **Console** (Vite + React): approvals queue, decision explainer, evidence metrics, freeze.
+An agent that can pay can be talked into paying the wrong person: an invoice with hidden instructions,
+an email that "updates" a supplier's bank details, a look-alike supplier. SafePay lets the agent do the
+work but never lets it decide where money goes. Every payment passes a deterministic Guardian, a 13-week
+cash forecast and a blind lookup in a fraud network that other businesses feed, and the database itself
+refuses anything that breaks the books.
+
+## How a payment flows
+
+<p align="center"><img src="docs/assets/architecture.svg" alt="SafePay data flow: invoice, extractor, planner, Guardian with the fraud network, human approval, ledger, outbox, simulated bank, reconciler, T4 freeze" width="860"></p>
+
+| Layer | What stops the attack | Proof |
+|---|---|---|
+| Extraction | The LLM has no tools; its output is a strict schema; raw text stays tagged `untrusted` | `core/apps/agent/tests/test_injection.py` |
+| Payee binding | The account always comes from the vendor registry, never from the invoice | same file, `make demo` steps 3 and 4 |
+| Guardian | Deterministic rules, caps and a risk score; the Decision is signed and bound to the exact payment | `core/apps/guardian/tests/` |
+| Tiers | T1 auto, T2 cool-off with owner veto, T3 human, T4 freeze; the agent cannot change its tier | `docs/SECURITY.md` section 2 |
+| Database | Balanced entries at COMMIT, no overdraft, append-only ledger and audit, no double payment | `core/tests/test_db_roles.py`, `core/apps/ledger/tests/` |
+| Fraud network | Bank-attested reports from other businesses; lookups are blind, so the operator learns nothing | `intel/tests/`, the privacy attack below |
+| Freeze | A hijacked agent that keeps probing freezes its own tenant | `core/tests/test_api_flows.py` |
+
+Details: [architecture](docs/architecture.md) and [security self-assessment](docs/SECURITY.md).
 
 ## Results
 
 B0 is an undefended agent with direct transfer rights, B1 adds the Guardian and permission tiers, and B2
-adds the fraud network. This section is rewritten by `make evidence`; no number in it is typed by hand.
+adds the fraud network. Same synthetic businesses, same invoices, same seed. This section is rewritten by
+`make evidence`; no number in it is typed by hand.
 
 <!-- results:start -->
 <!-- generated by `make evidence SEED=42` from evidence/run-42/metrics.json; do not edit by hand -->
@@ -46,9 +75,13 @@ Run `run-42` (demo mode, LLM=mock, policy 2026.10.19-2). SYNTHETIC data, SIMULAT
 | Decision latency p50 / p95 | not measured / not measured | 95.7 ms / 145.0 ms | 92.1 ms / 144.8 ms |
 
 Fraud network: 2 of 2 reported-payee scenarios stopped before payment with the network (B2), 0 without it (B1).
+Privacy: a network operator holding every request, every epoch key and 1,000,000 candidate IBANs recovered 0 of the 91 real payee accounts (the same attack on a plain SHA-256 lookup recovers 91).
 Full report with every residual attack: `evidence/run-42/EVIDENCE.md` (generated). Re-check signatures and numbers offline with `make verify-evidence SEED=42`.
 
 <!-- results:end -->
+
+The agent also completes the Topic E tasks (pay invoices, schedule payables, cash-flow alerts, financial
+analysis, financing match); per-task results are in `EVIDENCE.md`.
 
 ## Quickstart with Docker
 
@@ -56,12 +89,13 @@ Full report with every residual attack: `evidence/run-42/EVIDENCE.md` (generated
 make up              # build and start postgres, bank, intel, core-web, core-worker, console
 make seed            # 8 synthetic SMEs: users (TOTP), vendor registry, 90 days of history
 make demo            # scripted walkthrough on the live stack (payments, attacks, network, freeze)
-make evidence        # B0/B1/B2 run into evidence/run-42/ (+ EVIDENCE.md)
+make evidence        # B0/B1/B2 run + operator privacy attack into evidence/run-42/ (+ EVIDENCE.md)
 make verify-evidence # offline re-check of every signature, the audit chains and the metrics
 ```
 
 Console: http://127.0.0.1:8080. Services: core :8000, intel :8001, bank (simulated) :8002, all bound to
 127.0.0.1. Secrets and keys are generated on first start into `ops/dev-keys/` (gitignored).
+`make down-volumes` resets the database (and the demo users that lived in it).
 
 ## Without Docker (Windows, macOS, Linux)
 
@@ -86,41 +120,59 @@ user's password and current one-time code:
 cd sim && uv run python -m safepay_sim.harness otp logistics.approver --password
 ```
 
-An approver sees the held payments of their company, opens the decision explainer, and approves or
-rejects with a reason. The person who issued the agent's token cannot approve the agent's proposals.
 `make demo` rejects its own attack payments at the end, so run `make hold TWIN=logistics` to leave one
-held payment in that company's queue.
+held payment in that company's approvals queue. The approver opens it, reads the decision explainer and
+approves or rejects with a reason. The person who issued the agent's token cannot approve it.
+
+## Measuring a real LLM
+
+Every test and the evidence run use the deterministic mock. To measure a real model on the same
+synthetic invoices (field accuracy, printed bank details, and whether an injection ever reaches a planner
+tool argument):
+
+```bash
+export ANTHROPIC_API_KEY=...          # never committed; SAFEPAY_LLM_MODEL defaults to claude-opus-5-5
+make evidence-llm                     # writes evidence/llm-anthropic-42/LLM.md
+make evidence-llm PROVIDER=mock       # the mock baseline, same report format
+```
 
 ## Development
 
 ```bash
-make verify          # ruff + mypy + pytest (spec, RFC vectors, core, intel, bank, sim) + console lint/test
+make verify          # ruff + mypy (strict where it matters) + pytest (spec, RFC vectors, core, intel,
+                     # bank, sim) + console lint/test
+make tech-doc        # technical documentation PDF from docs/architecture.md + the run's results
+make clean-clone     # fresh copy, README quickstart, demo, evidence, verify (stop the stack first)
 make help            # all targets
 ```
 
-## Status and known gaps
+CI (`.github/workflows/ci.yml`) runs `make verify`, then the Docker stack, seed, demo, evidence and both
+verifiers, builds the PDF, and uploads `evidence/run-42/`. It also runs gitleaks, pip-audit and pnpm audit.
 
-- Verified on Windows with the native runner: `make verify`, `make seed`, `make demo`, `make evidence`,
-  `make verify-evidence`, `make verify-audit`, and the console in a browser.
-- Verified on Linux with Docker: `make up`, `make seed`, `make demo`, `make evidence`, both verifiers,
-  `make verify`, `make clean-clone`, and approving a held payment in the console on :8080. CI runs
-  `make verify`, then `make up`, seed, demo, evidence and both verifiers, and uploads the evidence bundle.
-- `make clean-clone` copies the project to a temporary directory and runs the quickstart there on its own
-  compose project (stop the main stack first). When this folder is not its own git repository it copies
-  the files git would not ignore instead of cloning.
-- Security self-assessment: [docs/SECURITY.md](docs/SECURITY.md) (tiers and the tests that prove them,
-  threat model, known risks, OWASP LLM Top 10 mapping).
-- Technical documentation PDF (deliverable 01): `make tech-doc` writes
-  `evidence/run-42/SafePay-Technical-Documentation.pdf` from `docs/architecture.md` and the run's
-  generated results (needs Chromium, Chrome or Edge). CI builds it into the evidence artifact.
-- Deck outline: [docs/DECK.md](docs/DECK.md). Demo video script: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
-  The video itself is not recorded yet.
-- Harness scope and simplifications are listed in `docs/DECISIONS.md` (D-035 onwards) and in each
-  bundle's `EVIDENCE.md`.
+## Repository
 
-## Layout and documents
+| Path | Contents |
+|---|---|
+| `spec/` | Contracts: OpenAPI, JSON schemas, Guardian policy, state machine, ledger accounts, RFC test vectors |
+| `core/` | Django 5.2 tenant domain: agent, Guardian, payments, ledger, cash flow, approvals, audit, keystore |
+| `intel/` | Fraud network service: members, VOPRF, reports, signed snapshots, privacy attack |
+| `bank_sandbox/` | Simulated bank: accounts, transfers, signed receipts and statements |
+| `console/` | Vite + React + TypeScript console: approvals queue, decision explainer, metrics, freeze |
+| `sim/` | Synthetic twin businesses and the B0/B1/B2 evidence harness |
+| `ops/` | Docker compose, Makefile, scripts |
+| `docs/` | [architecture](docs/architecture.md), [security](docs/SECURITY.md), [decisions](docs/DECISIONS.md), [deck outline](docs/DECK.md), [demo script](docs/DEMO_SCRIPT.md) |
+| `evidence/` | Generated bundles only (gitignored) |
 
-`spec/` frozen contracts · `core/` `intel/` `bank_sandbox/` Django 5.2 projects · `console/` Vite +
-React · `sim/` twins and the B0/B1/B2 harness · `ops/` compose, Makefile, scripts · `docs/` design
-([architecture](docs/architecture.md), [build plan](docs/BUILD_PLAN.md),
-[competition](docs/COMPETITION.md), [decisions](docs/DECISIONS.md), [security](docs/SECURITY.md)) · `evidence/` generated bundles only.
+## Status and honest limits
+
+- This version is verified with Docker on Linux (`make up` through `make clean-clone`, and the console in a
+  browser). The native runner (`make native-*`) runs the same stack without Docker.
+- The one attack class that still moves money is the first payment of a split to a new payee: it looks
+  exactly like an ordinary first payment to a new supplier, stays under the new-payee cap and waits out
+  the T2 cool-off. An owner who watches the cool-off can veto it. Every residual case is listed in
+  `EVIDENCE.md`.
+- The `voprf` binding is unaudited; intel checks it against the RFC 9497 vectors at every start-up.
+- Keys live on the same host as the data (prototype); the keystore is built to map to a KMS or HSM.
+- Full list: [docs/SECURITY.md](docs/SECURITY.md) section 7. Decisions: [docs/DECISIONS.md](docs/DECISIONS.md).
+
+Brand icons from [Simple Icons](https://simpleicons.org) (CC0); trademarks belong to their owners.

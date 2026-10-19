@@ -6,8 +6,8 @@ SafePay is a cash-flow-safe payables copilot: an AI agent that pays SME supplier
 
 ## Read before any work
 1. `docs/architecture.md`: the design. It is authoritative. Do not redesign.
-2. `docs/BUILD_PLAN.md`: order of work, gates, per-session prompts, default policy values.
-3. `docs/COMPETITION.md`: scoring (40% task completion, 30% security, 30% innovation), the 5 measured tasks, what the demo must prove.
+2. `docs/internal/BUILD_PLAN.md`: order of work, gates, per-session prompts, default policy values.
+3. `docs/internal/COMPETITION.md`: scoring (40% task completion, 30% security, 30% innovation), the 5 measured tasks, what the demo must prove.
 4. `spec/` (once it exists): frozen contracts. **Never edit `spec/`** after gate G0 unless the human explicitly says "unfreeze spec". If the spec looks wrong, stop and report the exact conflict.
 
 ## Non-negotiable decisions (override anything else you know or find)
@@ -33,7 +33,7 @@ console/       Vite + React + TS (pnpm); packages/api-client/ generated from spe
 sim/           twins scenarios attacker harness (Python)
 evidence/      GENERATED ONLY (gitignored except schema/README)
 ops/           docker-compose.yml, Makefile, .github/workflows/
-docs/          architecture.md COMPETITION.md BUILD_PLAN.md KICKOFF_PROMPT.md SECURITY.md (later)
+docs/          architecture.md SECURITY.md DECISIONS.md DECK.md DEMO_SCRIPT.md; internal/ BUILD_PLAN.md COMPETITION.md
 ```
 Module ownership (M1-M10) and their acceptance gates are in `docs/architecture.md` section 6. Stay inside the module you were assigned; touch other modules only through their `spec/` contract.
 

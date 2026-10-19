@@ -38,16 +38,14 @@ DIFFERENCES = """
 This document is the design. The prototype implements it with these differences, also listed in
 `docs/SECURITY.md` (security self-assessment) and `docs/DECISIONS.md`:
 
-- Account numbers are encrypted with one AES-256-GCM key per deployment, with the tenant id as
-  associated data, not with a per-tenant data key wrapped by a KEK.
-- The automatic T4 freeze comes from the reconciler on a bank mismatch. A freeze on unusual agent
-  velocity is not built; the caps still bound the loss.
-- The privacy test with a large list of candidate IBANs (section 2.7) is not built. The evidence run
-  measures that no captured blind query contains an IBAN.
-- The deterministic mock LLM backs every test and the evidence run. A real provider is supported
-  (`SAFEPAY_LLM=anthropic`) but not measured.
-- T2 payments in the evidence run execute after the cool-off because the harness never vetoes; they
-  are reported as residual loss.
+- Encrypted account data is bound to its tenant (associated data = tenant id), not to its table, column
+  and row as section 3.3 describes. Each tenant has its own data key wrapped by the KEK.
+- The deterministic mock LLM backs every test and this evidence run. The real provider path is built
+  and tested with a stubbed client, and `make evidence-llm` measures a real model when a key is set.
+- T2 payments in the evidence run execute after the cool-off because the harness never vetoes. The one
+  attack that still moves money this way is the first payment of a split to a new payee.
+- Keys, including the KEK, are files on the same host as the data; the KeyStore port is built to map to
+  a KMS or HSM.
 """
 
 CSS = """

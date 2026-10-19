@@ -164,14 +164,14 @@ decide(p: Proposal) -> Decision                         # pure function + 3 read
 |---|---|---|
 | BANK_DETAIL_MISMATCH | Invoice shows an account different from the registry (classic invoice-redirection fraud) | +50 |
 | LOOKALIKE_VENDOR / LOOKALIKE_ACCOUNT | Unicode TR39 skeleton + Damerau-Levenshtein ≤2 to an existing vendor; account sharing prefix/suffix with a known one | +50 |
-| NETWORK_REPORTED_2PLUS / _1 | ≥2 distinct reporters / 1 reporter in the current snapshot | +50 / +25 |
+| NETWORK_REPORTED_2PLUS / _1 | ≥2 distinct reporters / 1 reporter in the current snapshot (with NEW_OR_CHANGED_PAYEE, one report already holds) | +50 / +35 |
 | INJECTION_MARKERS | Instruction-like text in untrusted fields (signal only; the structural defence is 2.1) | +30 |
 | DUPLICATE_SUSPECT | Same vendor and amount within 30 days, reference edit distance ≤2 | +30 |
-| SPLIT_PATTERN | ≥3 payments to one payee in 24 h summing over the per-tx cap | +30 |
+| SPLIT_PATTERN | ≥3 payments to one payee in 24 h summing over the per-tx cap; for a new or changed payee ≥2 payments summing over the new-payee cap | +35 |
 | AMOUNT_ANOMALY | Robust z-score (median/MAD) of amount vs this vendor's history > 3.5 | +20 |
 | NEW_OR_CHANGED_PAYEE | Account first used or changed <30 days ago | +15 |
 
-Weights and thresholds live in a versioned policy file; every Decision stores `policy_version` so any past verdict can be replayed. Network signals add risk and can force HOLD; they never DENY, so false reports cannot become a denial of service against an honest vendor.
+Weights and thresholds live in a versioned policy file (2026.10.19-2 since D-045); every Decision stores `policy_version` so any past verdict can be replayed. Network signals add risk and can force HOLD; they never DENY, so false reports cannot become a denial of service against an honest vendor.
 
 ### 2.4 Ledger posting (double entry, amounts in integer minor units)
 
@@ -222,7 +222,7 @@ sequenceDiagram
 | Snapshot | Per epoch (7 days): {tag: distinct_reporters, expiry}, Ed25519-signed, pulled every 10 min. Lookup is local, so the server cannot tell a hit from a miss. |
 | Report admission | Member-signed report with the payee identifier, a **bank-signed settlement receipt** proving the member actually paid that account in the last 90 days, and an evidence hash. One count per (member, payee); 30-day expiry; retraction by the reporter; reporters with upheld disputes are suspended. |
 | Abuse limits | OPRF quota 500 evaluations/member/day and per-epoch key rotation bound enumeration; members are admission-controlled (KYB in production), which bounds Sybils. |
-| Privacy test | Adversary gets the full server transcript and the server key plus 10^6 candidate IBANs. Pass = matching accuracy no better than chance, repeated queries for one payee unlinkable, and zero IBAN substrings in any captured client request. |
+| Privacy test | Adversary gets the full server transcript and the server key plus 10^6 candidate IBANs. Pass = matching accuracy no better than chance, repeated queries for one payee unlinkable, and zero IBAN substrings in any captured client request. Runs in every evidence bundle with a positive control (a plain SHA-256 lookup must be fully recovered), D-048. |
 
 Honest scope: the server sees reported accounts and their reporters by design, because accusations need accountability. What stays private is the *query*: whom an honest business is about to pay.
 
@@ -238,7 +238,7 @@ Honest scope: the server sees reported accounts and their reporters by design, b
 | 2 | Bank-detail change by email (invoice redirection) | Registry change = owner + second person + call-back attestation; new account is T2/T3 + network check | Social engineering of two staff |
 | 3 | Look-alike vendor or account | TR39 skeleton + edit distance; new-payee caps | Heuristic false negatives |
 | 4 | Hijacked planner (LLM06 excessive agency) | Single propose tool; tiers enforced server-side and in DB | Bounded by caps |
-| 5 | Stolen agent token | Scoped T0-T2, 1 h TTL, HMAC-hashed at rest, velocity freeze | ≤ rolling caps until T4 freeze |
+| 5 | Stolen agent token | Scoped T0-T2, 1 h TTL, HMAC-hashed at rest, velocity freeze (3 refused requests in 10 min, D-046) | ≤ rolling caps until T4 freeze |
 | 6 | Insider self-approval | Initiator ≠ approver (DB CHECK); step-up MFA; two distinct approvers at or above the high cap; hard rules, payee account and funds re-checked at approval | Collusion of two |
 | 7 | Double spend / race | Row lock on limits; UNIQUE fingerprint and nonce; CHECK balance ≥ 0 | None known |
 | 8 | Network poisoning (false reports) | Bank-attested proof of payment; distinct reporters; expiry; never blocks | Coordinated members can force HOLDs |
@@ -267,7 +267,7 @@ Configuration (caps, roles, vendor registry) is owner-only with MFA; registry ba
 | MFA | django-otp 1.7 TOTP for all humans; step-up (fresh OTP ≤5 min) to approve, unfreeze or edit registry. Passkeys dropped (D-030). |
 | Sessions | Secure, HttpOnly, SameSite=Lax cookies; CSRF on; 30 min idle / 12 h absolute for approvers; HSTS; strict CSP (bundled assets only). |
 | Service auth | Agent tokens: 256-bit random, stored as HMAC-SHA256(pepper, token) (Argon2 is for low-entropy secrets). Core to intel and bank: Ed25519-signed requests with timestamp + nonce; mTLS in production. |
-| Encryption | TLS 1.3 at the edge. Account numbers and contacts: AES-256-GCM per-tenant data key, wrapped by a KEK (pyca/cryptography 50); AAD = tenant \| table \| column \| row id, preventing ciphertext swaps. Searchable via HMAC blind index. No custom primitives anywhere. |
+| Encryption | TLS 1.3 at the edge. Account numbers and contacts: AES-256-GCM per-tenant data key, wrapped by a KEK with RFC 3394 key wrap (pyca/cryptography 50, D-047); AAD = tenant \| table \| column \| row id in the design, tenant only in the prototype, preventing cross-tenant ciphertext swaps. Searchable via HMAC blind index. No custom primitives anywhere. |
 | Audit log | Append-only events; h_i = SHA-256(h_{i-1} \|\| RFC 8785 canonical JSON(event)); Ed25519-signed checkpoint every 100 events or 5 min; `make verify-audit` recomputes the chain from genesis. |
 
 | Key | Algorithm | Holder | Prototype / production | Rotation |
@@ -374,7 +374,7 @@ Errors: RFC 9457 problem+json with a typed code (e.g. CAP_EXCEEDED, IDEMPOTENCY_
 | Window (Baku time, re-planned at G0, D-031) | Work | Gate |
 |---|---|---|
 | 19 Oct 02:00-11:45 | Skeleton, compose, CI, spec; G0 decisions applied; spec frozen | G0: pipeline green, spec frozen |
-| 11:45-17:30 | Parallel worktrees: M1, M2, M3, M4, M5 (docs/PARALLEL.md) | G1 by 17:30: invariants, vectors, per-rule tests pass |
+| 11:45-17:30 | Parallel worktrees: M1, M2, M3, M4, M5 (removed after the build; see DECISIONS.md D-034) | G1 by 17:30: invariants, vectors, per-rule tests pass |
 | 17:30-00:30 | Parallel: M6, M7, M8, M9; intel client | G2 by 00:30: T1/T2/T3/T4 flows end to end in compose |
 | 00:30-05:00 | M10 harness, console (4 views), audit verifier; first metrics | G3 by 05:00: metrics produced by script |
 | 20 Oct 05:00-07:59 | Docs from generated numbers, security self-assessment, deck, video, clean-clone test | Submit v1 by 07:59 |
@@ -390,7 +390,7 @@ Errors: RFC 9457 problem+json with a typed code (e.g. CAP_EXCEEDED, IDEMPOTENCY_
 
 | Risk | Status / mitigation |
 |---|---|
-| voprf 0.2 binding is young and unaudited (the Rust core is Meta's) | Pinned; CFRG vectors in CI; behind a port so pyoprf (non-verifiable) can replace it. Not "audited crypto"; stated as such. |
+| voprf 0.2 binding is young and unaudited (the Rust core is Meta's) | Pinned; CFRG vectors in CI and at every intel start-up (fail closed, D-049); behind a port so pyoprf (non-verifiable) can replace it. Not "audited crypto"; stated as such. |
 | Single OPRF key holder | VOPRF stops per-client keys, not collusion or downtime; threshold OPRF is roadmap. |
 | Coordinated false reports | Can force HOLDs, never losses; dispute and suspension path. |
 | Keys on the same host as data | Prototype only; KeyStore port maps to KMS/HSM. |

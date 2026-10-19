@@ -1,4 +1,4 @@
-# SafePay Guardian policy. FROZEN at G0 (values from docs/BUILD_PLAN.md "Default policy values").
+# SafePay Guardian policy. FROZEN at G0 (values from docs/internal/BUILD_PLAN.md "Default policy values").
 # Every Decision stores policy_version so any past verdict can be replayed against this exact file.
 # Money: integer minor units (USD cents). Rates: decimal STRINGS, parse with decimal.Decimal, never float.
 # Windows are rolling (now - N hours), never calendar days.
@@ -145,7 +145,7 @@ reason_codes:
     AMOUNT_ANOMALY: 20
     NEW_OR_CHANGED_PAYEE: 15
 
-# Policy resolution (docs/BUILD_PLAN.md; DECISIONS.md D-001). Evaluated in order; first match wins.
+# Policy resolution (docs/internal/BUILD_PLAN.md; DECISIONS.md D-001). Evaluated in order; first match wins.
 # payee_new_or_changed := registry account first used or changed < new_or_changed_window_days ago.
 verdict_rules:
   - id: R1

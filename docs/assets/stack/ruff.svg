@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="191" height="28" role="img" aria-label="Ruff: + mypy strict">
+<title>Ruff: + mypy strict</title>
+<clipPath id="r"><rect width="191" height="28" rx="5"/></clipPath>
+<g clip-path="url(#r)"><rect width="72" height="28" fill="#1f2a36"/><rect x="72" width="119" height="28" fill="#D7FF64"/></g>
+<g transform="translate(9 6) scale(0.6667)" fill="#ffffff"><path d="M3 0C1.338 0 0 1.338 0 3v18c0 1.662 1.338 3 3 3h18c1.662 0 3-1.338 3-3V3c0-1.662-1.338-3-3-3Zm4.2 7.2h8.641c.53 0 .959.43.959.959v3.266c0 .53-.43.959-.959.959h-.961v.768h1.92V16.8h-4.416v-2.88h-.768v2.88H7.2Zm3.648 3.648v.768h2.304v-.768z"/></g>
+<g font-family="Verdana,DejaVu Sans,Geneva,sans-serif" font-size="12" font-weight="600">
+<text x="30" y="18.5" fill="#ffffff">Ruff</text>
+<text x="82" y="18.5" fill="#14202b">+ mypy strict</text></g>
+</svg>

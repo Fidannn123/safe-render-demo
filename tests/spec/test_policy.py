@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
-# Oracle: docs/BUILD_PLAN.md "Default policy values", as changed by DECISIONS.md D-045. Typed here on
+# Oracle: docs/internal/BUILD_PLAN.md "Default policy values", as changed by DECISIONS.md D-045. Typed here on
 # purpose: the test is the check.
 DEFAULT_WEIGHTS = {
     "BANK_DETAIL_MISMATCH": 50,

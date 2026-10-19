@@ -30,7 +30,7 @@ Notes: Topic E framing. Payables sit next to cash-flow alerts, analysis and fina
 - PostgreSQL enforces the money rules: balanced entries, no overdraft, append-only ledger and audit, no
   double payment.
 
-Visual: the trust-domain diagram from `docs/architecture.md` section 1.
+Visual: `docs/assets/architecture.svg` (the data flow with the tech stack).
 
 ## 4. Permission tiers
 
@@ -66,16 +66,19 @@ Visual: the sequence diagram from `docs/architecture.md` section 2.7.
 
 - Lift: `{EVIDENCE: Fraud network / detection lift}` (reported-payee scenarios stopped before payment, B2
   vs B1).
-- Privacy: blind queries captured `{EVIDENCE: Fraud network / Blind queries captured}`, queries containing
-  any IBAN `{EVIDENCE: Fraud network / queries containing any IBAN}`.
+- Privacy attack: an operator with every request, every epoch key and
+  `{EVIDENCE: Fraud network / Operator privacy attack / candidate IBANs}` candidates recovers
+  `{... / identifiers recovered}` payees; the same attack on a plain SHA-256 lookup recovers
+  `{... / Control}`. That control is the point: the attack is strong enough to catch a leak.
 - Example: `pharmacy-reported-2plus-01` is paid in B1 and held in B2
   (`uv run python ops/scripts/show_scenarios.py pharmacy-reported-2plus-01`).
 
 ## 9. Honest limits
 
-From `docs/SECURITY.md` section 7: unaudited `voprf` binding, T2 residual loss (list from `EVIDENCE.md`
-"Attacks that still moved money"), keys on the same host, mock LLM in all measurements, scripted
-attackers, synthetic data and simulated bank.
+From `docs/SECURITY.md` section 7: the one attack that still moves money (first payment of a new-payee
+split, from `EVIDENCE.md` "Attacks that still moved money"), the `voprf` binding (self-tested at every
+start-up, still unaudited), keys on the same host, mock LLM in the published bundle (`make evidence-llm`
+measures a real one), scripted attackers, synthetic data and simulated bank.
 
 ## 10. Verify it yourself, and what is next
 
