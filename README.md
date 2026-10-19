@@ -36,6 +36,46 @@ work but never lets it decide where money goes. Every payment passes a determini
 cash forecast and a blind lookup in a fraud network that other businesses feed, and the database itself
 refuses anything that breaks the books.
 
+## Screenshots
+
+The console ships with a landing page at `/` and the operator console at `/console`, both in the same
+design language (bundled fonts, no CDN). The console screenshots use synthetic sample payments served by
+a mocked API for the capture; no figure in them is a measured result.
+
+**Landing page**
+
+<p align="center"><img src="docs/screenshots/landing-hero.jpg" alt="Landing page hero: Your agent pays. The rules decide." width="860"></p>
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/landing-how.jpg" alt="How it works: the extractor only reads"></td>
+<td width="50%"><img src="docs/screenshots/landing-console-features.jpg" alt="Inside the console: tiers, reconciliation, decision explainer"></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/landing-showcase.jpg" alt="The console showcase"></td>
+<td><img src="docs/screenshots/landing-security.jpg" alt="Defences you can check"></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/landing-run.jpg" alt="Run it: make up, make demo, make evidence"></td>
+<td><img src="docs/screenshots/landing-faq.jpg" alt="FAQ"></td>
+</tr>
+</table>
+
+**Console**
+
+<p align="center"><img src="docs/screenshots/console-approvals.jpg" alt="Approvals queue with a held payment under review" width="860"></p>
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/console-decision.jpg" alt="Decision explainer: risk score, reasons and signed fields"></td>
+<td width="50%"><img src="docs/screenshots/console-freeze.jpg" alt="Freeze: stop all new outflow"></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/console-sign-in.jpg" alt="Sign in with password and one-time code"></td>
+<td align="center"><img src="docs/screenshots/landing-mobile.jpg" alt="Landing page on a phone" width="45%"> <img src="docs/screenshots/console-mobile.jpg" alt="Console on a phone" width="45%"></td>
+</tr>
+</table>
+
 ## How a payment flows
 
 <p align="center"><img src="docs/assets/architecture.svg" alt="SafePay data flow: invoice, extractor, planner, Guardian with the fraud network, human approval, ledger, outbox, simulated bank, reconciler, T4 freeze" width="860"></p>
@@ -93,9 +133,10 @@ make evidence        # B0/B1/B2 run + operator privacy attack into evidence/run-
 make verify-evidence # offline re-check of every signature, the audit chains and the metrics
 ```
 
-Console: http://127.0.0.1:8080. Services: core :8000, intel :8001, bank (simulated) :8002, all bound to
-127.0.0.1. Secrets and keys are generated on first start into `ops/dev-keys/` (gitignored).
-`make down-volumes` resets the database (and the demo users that lived in it).
+Landing page: http://127.0.0.1:8080, console: http://127.0.0.1:8080/console. Services: core :8000,
+intel :8001, bank (simulated) :8002, all bound to 127.0.0.1. Secrets and keys are generated on first
+start into `ops/dev-keys/` (gitignored). `make down-volumes` resets the database (and the demo users
+that lived in it).
 
 ## Without Docker (Windows, macOS, Linux)
 
@@ -105,7 +146,7 @@ Needs uv, pnpm, GNU make and the PostgreSQL 18 server binaries (for example the 
 uv sync --all-packages --frozen && pnpm install --frozen-lockfile
 export PG_BIN=/path/to/pgsql/bin SAFEPAY_RUNNER=native
 make native-init     # cluster on 127.0.0.1:55432, roles, three databases, migrations
-make native-up       # bank, intel, core, worker and the console on http://127.0.0.1:5173
+make native-up       # bank, intel, core, worker and the console on http://127.0.0.1:5173/console
 make seed && make demo && make evidence && make verify-evidence
 make native-down     # stop everything (make native-reset wipes the databases)
 ```
@@ -121,8 +162,9 @@ cd sim && uv run python -m safepay_sim.harness otp logistics.approver --password
 ```
 
 `make demo` rejects its own attack payments at the end, so run `make hold TWIN=logistics` to leave one
-held payment in that company's approvals queue. The approver opens it, reads the decision explainer and
-approves or rejects with a reason. The person who issued the agent's token cannot approve it.
+held payment in that company's approvals queue. The approver signs in at `/console`, opens it, reads the
+decision explainer and approves or rejects with a reason. The person who issued the agent's token cannot
+approve it.
 
 ## Measuring a real LLM
 
@@ -157,7 +199,7 @@ verifiers, builds the PDF, and uploads `evidence/run-42/`. It also runs gitleaks
 | `core/` | Django 5.2 tenant domain: agent, Guardian, payments, ledger, cash flow, approvals, audit, keystore |
 | `intel/` | Fraud network service: members, VOPRF, reports, signed snapshots, privacy attack |
 | `bank_sandbox/` | Simulated bank: accounts, transfers, signed receipts and statements |
-| `console/` | Vite + React + TypeScript console: approvals queue, decision explainer, metrics, freeze |
+| `console/` | Vite + React + TypeScript: landing page (`/`) and console (`/console`: approvals queue, decision explainer, metrics, freeze) |
 | `sim/` | Synthetic twin businesses and the B0/B1/B2 evidence harness |
 | `ops/` | Docker compose, Makefile, scripts |
 | `docs/` | [architecture](docs/architecture.md), [security](docs/SECURITY.md), [decisions](docs/DECISIONS.md), [deck outline](docs/DECK.md), [demo script](docs/DEMO_SCRIPT.md) |
