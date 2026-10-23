@@ -1,0 +1,20 @@
+# Disposable, synthetic demo. Free instances lose all state when restarted.
+services:
+  - type: web
+    name: safepay-demo
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./ops/render/Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    autoDeployTrigger: "off"
+    envVars:
+      - key: SAFEPAY_MODE
+        value: demo
+      - key: SAFEPAY_LLM
+        value: mock
+      - key: SAFEPAY_DEMO_PASSWORD
+        sync: false
+      - key: SAFEPAY_DEMO_TOTP_KEY
+        sync: false
